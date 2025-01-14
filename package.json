@@ -1,0 +1,47 @@
+{
+  "name": "hyperlimit",
+  "version": "1.0.0",
+  "description": "High-performance rate limiter with advanced features",
+  "main": "index.js",
+  "scripts": {
+    "build": "node-gyp rebuild && tsc",
+    "pretest": "npm run build",
+    "test": "mocha test/**/*.test.js",
+    "benchmark": "node examples/benchmark.js",
+    "example:express": "node examples/express.js",
+    "example:fastify": "node examples/fastify.js",
+    "example:hyperexpress": "node examples/hyperexpress.js",
+    "example:distributed": "node examples/distributed.js",
+    "test:express": "curl -v http://localhost:3000/api/protected && curl -v http://localhost:3000/metrics",
+    "test:fastify": "curl -v http://localhost:3000/api/protected && curl -v http://localhost:3000/metrics",
+    "test:hyperexpress": "curl -v http://localhost:3000/api/protected && curl -v http://localhost:3000/metrics"
+  },
+  "keywords": [
+    "rate-limiter",
+    "performance",
+    "token-bucket",
+    "sliding-window",
+    "distributed"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "node-addon-api": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.6",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "fastify": "^5.2.1",
+    "hyper-express": "^6.17.3",
+    "ioredis": "^5.4.2",
+    "mocha": "^10.2.0",
+    "node-gyp": "^10.0.1",
+    "rate-limiter-flexible": "^5.0.4",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "gypfile": true
+}
