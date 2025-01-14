@@ -1,16 +1,5 @@
 const { HyperLimit } = require('../build/Release/hyperlimit.node');
 
-// Create a shared limiter instance
-const limiter = new HyperLimit();
-
-// Express-specific adapter
-const expressAdapter = {
-    getHeaders: req => req.headers,
-    getClientIdentifier: req => req.ip,
-    setResponseHeader: (res, name, value) => res.setHeader(name, String(value)),
-    sendError: (res, status, body) => res.status(status).json(body)
-};
-
 function rateLimit(options = {}) {
     const {
         maxTokens = 100,
@@ -22,21 +11,19 @@ function rateLimit(options = {}) {
         bypassHeader,
         bypassKeys = [],
         keyGenerator,
-        onRejected
+        onRejected,
+        redis
     } = options;
 
     // Convert time strings to milliseconds
     const windowMs = parseDuration(window);
     const blockMs = block ? parseDuration(block) : 0;
 
-    // Create or get limiter
-    try {
-        limiter.createLimiter(key, maxTokens, windowMs, blockMs, maxPenalty);
-    } catch (error) {
-        if (!error.message.includes('already exists')) {
-            throw error;
-        }
-    }
+    // Create limiter instance with Redis support if configured
+    const limiter = new HyperLimit(redis ? { redis } : undefined);
+
+    // Create limiter for this route
+    limiter.createLimiter(key, maxTokens, windowMs, sliding, blockMs, maxPenalty);
 
     return function rateLimitMiddleware(req, res, next) {
         try {
@@ -60,6 +47,9 @@ function rateLimit(options = {}) {
             res.setHeader('X-RateLimit-Limit', String(info.limit));
             res.setHeader('X-RateLimit-Remaining', String(Math.max(0, info.remaining)));
             res.setHeader('X-RateLimit-Reset', String(Math.ceil(info.reset / 1000))); // Convert to seconds
+
+            // Attach limiter to request for potential use in route handlers
+            req.rateLimit = { limiter, key };
 
             const allowed = limiter.tryRequest(key, clientKey);
             if (allowed) {
@@ -108,5 +98,4 @@ function parseDuration(duration) {
     }
 }
 
-// Export the middleware factory and limiter instance
-module.exports = Object.assign(rateLimit, { limiter }); 
+module.exports = rateLimit; 

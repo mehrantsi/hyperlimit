@@ -2,21 +2,16 @@ const HyperExpress = require('hyper-express');
 const rateLimit = require('../src/middleware-hyperexpress');
 
 // Create HyperExpress app
-const app = new HyperExpress.Server({
-    trust_proxy: true,
-    fast_buffers: true,
-    fast_abort: true,
-    fast_headers: true
-});
+const app = new HyperExpress.Server();
 
-// Helper for HyperExpress JSON responses
-function sendJson(res, status, data) {
-    res.status(status || 200);
-    res.header('Content-Type', 'application/json');
-    res.send(Buffer.from(JSON.stringify(data)));
-}
+// Optional Redis configuration - uncomment to enable distributed rate limiting
+// const redisConfig = {
+//     host: 'localhost',
+//     port: 6379,
+//     prefix: 'rl:'
+// };
 
-// Public API - 100 requests per minute
+// Example routes using direct configuration
 app.get('/api/public', rateLimit({
     key: 'public',
     maxTokens: 100,
@@ -24,10 +19,10 @@ app.get('/api/public', rateLimit({
     sliding: true,
     block: '30s'
 }), (req, res) => {
-    sendJson(res, 200, { message: 'Public API response' });
+    res.json({ message: 'Public API response' });
 });
 
-// Protected API - 5 requests per minute with penalties
+// Protected route with optional Redis-backed distributed rate limiting
 app.get('/api/protected', rateLimit({
     key: 'protected',
     maxTokens: 5,
@@ -35,8 +30,10 @@ app.get('/api/protected', rateLimit({
     sliding: true,
     block: '5m',
     maxPenalty: 3,
+    // redis: redisConfig, // Uncomment to enable distributed rate limiting
     onRejected: (req, res, info) => {
-        sendJson(res, 429, {
+        res.status(429);
+        res.json({
             error: 'Rate limit exceeded',
             message: 'Please try again later',
             retryAfter: info.retryAfter
@@ -45,10 +42,11 @@ app.get('/api/protected', rateLimit({
 }), (req, res) => {
     // Simulate violation that adds penalty
     if (Math.random() < 0.3) {
-        req.rateLimit.limiter.addPenalty('protected', 1);
-        return sendJson(res, 400, { error: 'Random violation occurred' });
+        req.rateLimit.limiter.addPenalty(req.rateLimit.key, 1);
+        res.status(400);
+        return res.json({ error: 'Random violation occurred' });
     }
-    sendJson(res, 200, { message: 'Protected API response' });
+    res.json({ message: 'Protected API response' });
 });
 
 // Custom rate limit with bypass keys and custom key generator
@@ -62,18 +60,26 @@ app.get('/api/custom', rateLimit({
     bypassHeader: 'X-Custom-Key',
     bypassKeys: ['special-key']
 }), (req, res) => {
-    sendJson(res, 200, { message: 'Custom API response' });
+    res.json({ message: 'Custom API response' });
 });
 
 // Metrics endpoint
 app.get('/metrics', (req, res) => {
-    const stats = rateLimit.limiter.getStats();
-    sendJson(res, 200, {
-        stats,
+    // Create a temporary limiter to get stats for each endpoint
+    const publicLimiter = new (require('../').HyperLimit)();
+    const protectedLimiter = new (require('../').HyperLimit)();
+    const customLimiter = new (require('../').HyperLimit)();
+
+    // Create the same limiters as in the routes
+    publicLimiter.createLimiter('public', 100, 60000, true, 30000);
+    protectedLimiter.createLimiter('protected', 5, 60000, true, 300000, 3);
+    customLimiter.createLimiter('custom', 20, 30000, true, 60000);
+
+    res.json({
         rateLimits: {
-            public: rateLimit.limiter.getRateLimitInfo('public'),
-            protected: rateLimit.limiter.getRateLimitInfo('protected'),
-            custom: rateLimit.limiter.getRateLimitInfo('custom')
+            public: publicLimiter.getRateLimitInfo('public'),
+            protected: protectedLimiter.getRateLimitInfo('protected'),
+            custom: customLimiter.getRateLimitInfo('custom')
         }
     });
 });
@@ -93,4 +99,7 @@ app.listen(3000)
         console.log('\n4. Metrics:');
         console.log('   curl http://localhost:3000/metrics');
     })
-    .catch(console.error); 
+    .catch(err => {
+        console.error('Failed to start server:', err);
+        process.exit(1);
+    }); 

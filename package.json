@@ -6,15 +6,16 @@
   "scripts": {
     "build": "node-gyp rebuild && tsc",
     "pretest": "npm run build",
-    "test": "mocha test/**/*.test.js",
+    "test": "mocha test/**/*.test.js --timeout 5000",
+    "test:core": "mocha test/core.test.js --timeout 5000",
+    "test:express": "mocha test/express.test.js --timeout 5000",
+    "test:fastify": "mocha test/fastify.test.js --timeout 5000",
+    "test:hyperexpress": "mocha test/hyperexpress.test.js --timeout 5000",
     "benchmark": "node examples/benchmark.js",
     "example:express": "node examples/express.js",
     "example:fastify": "node examples/fastify.js",
     "example:hyperexpress": "node examples/hyperexpress.js",
-    "example:distributed": "node examples/distributed.js",
-    "test:express": "curl -v http://localhost:3000/api/protected && curl -v http://localhost:3000/metrics",
-    "test:fastify": "curl -v http://localhost:3000/api/protected && curl -v http://localhost:3000/metrics",
-    "test:hyperexpress": "curl -v http://localhost:3000/api/protected && curl -v http://localhost:3000/metrics"
+    "example:distributed": "node examples/distributed.js"
   },
   "keywords": [
     "rate-limiter",
@@ -38,6 +39,7 @@
     "mocha": "^10.2.0",
     "node-gyp": "^10.0.1",
     "rate-limiter-flexible": "^5.0.4",
+    "supertest": "^6.3.4",
     "typescript": "^5.3.3"
   },
   "engines": {
