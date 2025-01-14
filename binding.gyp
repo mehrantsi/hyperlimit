@@ -22,8 +22,18 @@
     ],
     "include_dirs": [
       "<!@(node -p \"require('node-addon-api').include\")",
-      "src/native"
+      "/usr/include",
+      "/usr/local/include",
+      "/opt/homebrew/include"
     ],
-    'defines': [ 'NAPI_DISABLE_CPP_EXCEPTIONS' ]
+    "libraries": [
+      "-L/usr/lib",
+      "-L/usr/lib64",
+      "-L/usr/local/lib",
+      "-L/usr/local/lib64",
+      "-L/opt/homebrew/lib",
+      "-lhiredis"
+    ],
+    "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ]
   }]
 } 

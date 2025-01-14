@@ -1,5 +1,6 @@
 #include <napi.h>
 #include "ratelimiter.hpp"
+#include "redis_storage.hpp"
 
 class HyperLimit : public Napi::ObjectWrap<HyperLimit> {
 public:
@@ -34,9 +35,12 @@ public:
     HyperLimit(const Napi::CallbackInfo& info) : Napi::ObjectWrap<HyperLimit>(info) {
         Napi::Env env = info.Env();
         size_t bucketCount = 16384; // Default value
+        std::unique_ptr<DistributedStorage> storage;
 
         if (info.Length() > 0 && info[0].IsObject()) {
             Napi::Object options = info[0].As<Napi::Object>();
+            
+            // Get bucket count if specified
             if (options.Has("bucketCount")) {
                 Napi::Value val = options.Get("bucketCount");
                 if (val.IsNumber()) {
@@ -48,10 +52,36 @@ public:
                     }
                 }
             }
+
+            // Check for Redis options
+            if (options.Has("redis") && options.Get("redis").IsObject()) {
+                Napi::Object redisOpts = options.Get("redis").As<Napi::Object>();
+                std::string host = "localhost";
+                int port = 6379;
+                std::string prefix = "rl:";
+
+                if (redisOpts.Has("host") && redisOpts.Get("host").IsString()) {
+                    host = redisOpts.Get("host").As<Napi::String>().Utf8Value();
+                }
+                if (redisOpts.Has("port") && redisOpts.Get("port").IsNumber()) {
+                    port = redisOpts.Get("port").As<Napi::Number>().Int32Value();
+                }
+                if (redisOpts.Has("prefix") && redisOpts.Get("prefix").IsString()) {
+                    prefix = redisOpts.Get("prefix").As<Napi::String>().Utf8Value();
+                }
+
+                try {
+                    storage = std::make_unique<RedisStorage>(host, port, prefix);
+                } catch (const std::exception& e) {
+                    Napi::Error::New(env, std::string("Redis connection failed: ") + e.what())
+                        .ThrowAsJavaScriptException();
+                    return;
+                }
+            }
         }
 
         try {
-            rateLimiter = std::make_unique<RateLimiter>(bucketCount);
+            rateLimiter = std::make_unique<RateLimiter>(bucketCount, storage.release());
         } catch (const std::exception& e) {
             Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
         }

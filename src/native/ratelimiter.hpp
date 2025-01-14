@@ -24,6 +24,14 @@ inline uint32_t fmix32(uint32_t h) noexcept {
     return h;
 }
 
+// Forward declaration of DistributedStorage
+class DistributedStorage {
+public:
+    virtual ~DistributedStorage() = default;
+    virtual bool tryAcquire(const std::string& key, int64_t tokens) = 0;
+    virtual void release(const std::string& key, int64_t tokens) = 0;
+};
+
 class RateLimiter {
 private:
     std::atomic<size_t> BUCKET_COUNT;
@@ -135,14 +143,6 @@ private:
             int64_t minLimit = baseMaxTokens / 10;
             return std::max(minLimit, newLimit);
         }
-    };
-
-    // Distributed storage interface
-    class DistributedStorage {
-    public:
-        virtual ~DistributedStorage() = default;
-        virtual bool tryAcquire(const std::string& key, int64_t tokens) = 0;
-        virtual void release(const std::string& key, int64_t tokens) = 0;
     };
 
     std::unique_ptr<DistributedStorage> distributedStorage;
@@ -477,7 +477,20 @@ public:
         // Try to refill tokens
         refillTokens(*entry);
 
-        // Try to consume a token
+        // If we have distributed storage and a distributed key is set, check it first
+        if (distributedStorage && !entry->distributedKey.empty()) {
+            try {
+                if (!distributedStorage->tryAcquire(entry->distributedKey, entry->baseMaxTokens)) {
+                    metrics.blockedRequests.fetch_add(1, std::memory_order_relaxed);
+                    return false;
+                }
+            } catch (...) {
+                // If Redis fails, we'll just use local rate limiting
+                // This is a design choice - we could also choose to block in this case
+            }
+        }
+
+        // Try to consume a local token
         int64_t currentTokens;
         do {
             currentTokens = entry->tokens.load(std::memory_order_relaxed);
@@ -486,6 +499,14 @@ public:
                 if (entry->blockDurationMs > 0) {
                     int64_t now = getCurrentTimeMs();
                     entry->blockUntil.store(now + entry->blockDurationMs, std::memory_order_release);
+                }
+                // If we acquired a distributed token but failed locally, release it
+                if (distributedStorage && !entry->distributedKey.empty()) {
+                    try {
+                        distributedStorage->release(entry->distributedKey, 1);
+                    } catch (...) {
+                        // Ignore Redis errors here
+                    }
                 }
                 metrics.blockedRequests.fetch_add(1, std::memory_order_relaxed);
                 return false;
