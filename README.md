@@ -1,8 +1,8 @@
 # HyperLimit
 
 [![npm version](https://badge.fury.io/js/hyperlimit.svg)](https://badge.fury.io/js/hyperlimit)
-[![Build Status](https://github.com/mehrantsi/hyperlimit/workflows/Build/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions)
-[![Test Status](https://github.com/mehrantsi/hyperlimit/workflows/Test/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions)
+[![Build and Release](https://github.com/mehrantsi/hyperlimit/actions/workflows/build.yml/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions/workflows/build.yml)
+[![Test](https://github.com/mehrantsi/hyperlimit/actions/workflows/test.yml/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions/workflows/test.yml))
 
 High-performance native rate limiter for Node.js with lock-free design. Capable of handling 9M+ requests per second.
 
