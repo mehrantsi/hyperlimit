@@ -26,9 +26,7 @@
           "/DWIN32",
           "/D_WINDOWS",
           "/EHsc",
-          "/D__builtin_clzll=__lzcnt64",
-          "/FI\"intrin.h\"",
-          "/FI\"immintrin.h\""
+          "/FI\"src/native/win_compat.h\""
         ]
       }
     },
@@ -44,8 +42,7 @@
         "defines": [
           "NAPI_DISABLE_CPP_EXCEPTIONS",
           "NOMINMAX",
-          "WIN32_LEAN_AND_MEAN",
-          "__builtin_prefetch(addr,...)=_mm_prefetch((const char*)(addr),_MM_HINT_T0)"
+          "WIN32_LEAN_AND_MEAN"
         ]
       }, {
         "include_dirs": [

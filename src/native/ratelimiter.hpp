@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef _WIN32
+#include "win_compat.h"
+#endif
+
 #include <atomic>
 #include <chrono>
 #include <memory>
