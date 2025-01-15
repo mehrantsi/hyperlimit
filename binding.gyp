@@ -17,26 +17,49 @@
       "VCCLCompilerTool": { 
         "ExceptionHandling": 1,
         "Optimization": 3,
-        "AdditionalOptions": [ "/std:c++17", "/Zc:alignedNew" ]
+        "AdditionalOptions": [
+          "/std:c++17",
+          "/Zc:alignedNew",
+          "/DWIN32",
+          "/D_WINDOWS",
+          "/EHsc",
+          "/D__builtin_clzll=__lzcnt64",
+          "/D__builtin_prefetch=_mm_prefetch"
+        ]
       }
     },
-    "sources": [
-      "src/native/hyperlimit.cpp"
-    ],
-    "include_dirs": [
-      "<!@(node -p \"require('node-addon-api').include\")",
-      "/usr/include",
-      "/usr/local/include",
-      "/opt/homebrew/include"
-    ],
-    "libraries": [
-      "-L/usr/lib",
-      "-L/usr/lib64",
-      "-L/usr/local/lib",
-      "-L/usr/local/lib64",
-      "-L/opt/homebrew/lib",
-      "-lhiredis"
-    ],
-    "defines": [ "NAPI_DISABLE_CPP_EXCEPTIONS" ]
+    "conditions": [
+      ['OS=="win"', {
+        "include_dirs": [
+          "<!@(node -p \"require('node-addon-api').include\")",
+          "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/include"
+        ],
+        "libraries": [
+          "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/lib/hiredis.lib"
+        ],
+        "defines": [
+          "NAPI_DISABLE_CPP_EXCEPTIONS",
+          "_MM_HINT_T0=_MM_HINT::_MM_HINT_T0"
+        ]
+      }, {
+        "include_dirs": [
+          "<!@(node -p \"require('node-addon-api').include\")",
+          "/usr/include",
+          "/usr/local/include",
+          "/opt/homebrew/include"
+        ],
+        "libraries": [
+          "-L/usr/lib",
+          "-L/usr/lib64",
+          "-L/usr/local/lib",
+          "-L/usr/local/lib64",
+          "-L/opt/homebrew/lib",
+          "-lhiredis"
+        ],
+        "defines": [
+          "NAPI_DISABLE_CPP_EXCEPTIONS"
+        ]
+      }]
+    ]
   }]
 } 
