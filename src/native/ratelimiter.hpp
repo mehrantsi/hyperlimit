@@ -555,7 +555,7 @@ public:
             if (entry->maxPenaltyPoints > 0) {
                 int64_t current = entry->penaltyPoints.load(std::memory_order_relaxed);
                 while (current > 0) {
-                    int64_t newValue = std::max(0LL, current - points);
+                    int64_t newValue = std::max(int64_t(0), current - points);
                     if (entry->penaltyPoints.compare_exchange_weak(
                         current, newValue,
                         std::memory_order_relaxed, std::memory_order_relaxed)) {
