@@ -36,7 +36,6 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew install hiredis
-          brew install cmake --formula || true
 
       - name: Install system dependencies (Windows)
         if: matrix.os == 'windows-latest'
