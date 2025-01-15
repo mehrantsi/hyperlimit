@@ -28,8 +28,7 @@
           "/EHsc",
           "/D__builtin_clzll=__lzcnt64",
           "/FI\"intrin.h\"",
-          "/FI\"xmmintrin.h\"",
-          "/D__builtin_prefetch(addr,...)=_mm_prefetch((const char*)(addr),_MM_HINT_T0)"
+          "/FI\"immintrin.h\""
         ]
       }
     },
@@ -45,7 +44,8 @@
         "defines": [
           "NAPI_DISABLE_CPP_EXCEPTIONS",
           "NOMINMAX",
-          "WIN32_LEAN_AND_MEAN"
+          "WIN32_LEAN_AND_MEAN",
+          "__builtin_prefetch(addr,...)=_mm_prefetch((const char*)(addr),_MM_HINT_T0)"
         ]
       }, {
         "include_dirs": [
