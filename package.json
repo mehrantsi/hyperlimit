@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "install": "node-gyp-build",
-    "build": "prebuildify --napi && tsc",
+    "build": "prebuildify --napi --strip",
     "pretest": "npm run build",
     "test": "mocha test/**/*.test.js --timeout 5000",
     "test:core": "mocha test/core.test.js --timeout 5000",

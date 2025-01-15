@@ -1,4 +1,4 @@
-const { HyperLimit } = require('../build/Release/hyperlimit.node');
+const { HyperLimit } = require('node-gyp-build')(__dirname + '/..');
 
 function rateLimit(options = {}) {
     const {

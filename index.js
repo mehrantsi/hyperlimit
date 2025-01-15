@@ -1,4 +1,4 @@
-const hyperlimit = require('./build/Release/hyperlimit.node');
+const hyperlimit = require('node-gyp-build')(__dirname);
 
 // Export the native module
 module.exports = hyperlimit;
