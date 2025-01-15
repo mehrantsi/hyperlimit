@@ -7,32 +7,76 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18.x]
+        include:
+          - os: ubuntu-latest
+            is_primary: true
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: ${{ matrix.node-version }}
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Install system dependencies
+      - name: Install hiredis (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y libhiredis-dev
 
+      - name: Install hiredis (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install hiredis
+
+      - name: Install hiredis (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          vcpkg install hiredis:x64-windows
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install -g prebuildify
+          npm ci
 
       - name: Build native module
-        run: npm run build
+        run: prebuildify --napi
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+
+      - name: Upload prebuilt binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: prebuilds-${{ matrix.os }}
+          path: prebuilds/
+
+      # Only create and publish packages from Ubuntu
+      - name: Download all prebuilds
+        if: matrix.is_primary
+        uses: actions/download-artifact@v3
+        with:
+          path: prebuilds-all
+
+      - name: Merge prebuilds
+        if: matrix.is_primary
+        run: |
+          mkdir -p prebuilds
+          cp -r prebuilds-all/*/* prebuilds/
 
       - name: Create packages
+        if: matrix.is_primary
         run: |
           # Create core package
           mkdir -p dist/hyperlimit
-          cp -r build package.json README.md LICENSE dist/hyperlimit/
+          cp -r prebuilds package.json README.md LICENSE dist/hyperlimit/
           cd dist/hyperlimit
           npm pack
           cd ../..
@@ -95,6 +139,7 @@ jobs:
           cd ../..
 
       - name: Publish packages
+        if: matrix.is_primary
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
         run: |

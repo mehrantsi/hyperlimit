@@ -4,7 +4,8 @@
   "description": "High-performance rate limiter with advanced features",
   "main": "index.js",
   "scripts": {
-    "build": "node-gyp rebuild && tsc",
+    "install": "node-gyp-build",
+    "build": "prebuildify --napi && tsc",
     "pretest": "npm run build",
     "test": "mocha test/**/*.test.js --timeout 5000",
     "test:core": "mocha test/core.test.js --timeout 5000",
@@ -27,7 +28,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "node-addon-api": "^7.0.0"
+    "node-addon-api": "^7.0.0",
+    "node-gyp-build": "^4.8.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.6",
@@ -38,6 +40,7 @@
     "ioredis": "^5.4.2",
     "mocha": "^10.2.0",
     "node-gyp": "^10.0.1",
+    "prebuildify": "^5.0.1",
     "rate-limiter-flexible": "^5.0.4",
     "supertest": "^6.3.4",
     "typescript": "^5.3.3"
@@ -45,5 +48,8 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "gypfile": true
+  "gypfile": true,
+  "binary": {
+    "napi_versions": [7]
+  }
 }
