@@ -44,10 +44,21 @@ jobs:
           vcpkg install hiredis:x64-windows
           echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
           choco install cmake -y
-          # Add vcpkg include path to INCLUDE env var
+          
+          # Add vcpkg include and lib paths
           echo "INCLUDE=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\include;$env:INCLUDE" >> $env:GITHUB_ENV
-          # Add defines for MSVC to replace GCC intrinsics
-          echo "CXXFLAGS=/D__builtin_clzll=_lzcnt_u64 /D__builtin_prefetch=_mm_prefetch" >> $env:GITHUB_ENV
+          echo "LIB=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\lib;$env:LIB" >> $env:GITHUB_ENV
+          
+          # Add MSVC intrinsics and flags
+          echo "CXXFLAGS=/std:c++17 /O2 /DWIN32 /D_WINDOWS /EHsc /D__builtin_clzll=__lzcnt64 /D__builtin_prefetch=_mm_prefetch /I$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\include" >> $env:GITHUB_ENV
+          
+          # Add required headers for intrinsics
+          echo "#include <intrin.h>" > msvc_intrinsics.h
+          echo "#include <immintrin.h>" >> msvc_intrinsics.h
+          echo "#define _MM_HINT_T0 _MM_HINT::_MM_HINT_T0" >> msvc_intrinsics.h
+          
+          # Copy the intrinsics header to include path
+          copy msvc_intrinsics.h $env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\include\
 
       - name: Install dependencies
         run: |
