@@ -27,7 +27,10 @@
           "/D_WINDOWS",
           "/EHsc",
           "/D__builtin_clzll=__lzcnt64",
-          "/D__builtin_prefetch=_mm_prefetch"
+          "/D__builtin_prefetch=_mm_prefetch",
+          "/FI\"intrin.h\"",
+          "/FI\"xmmintrin.h\"",
+          "/D_MM_HINT_T0=_MM_HINT_T0"
         ]
       }
     },
@@ -42,7 +45,8 @@
         ],
         "defines": [
           "NAPI_DISABLE_CPP_EXCEPTIONS",
-          "_MM_HINT_T0=_MM_HINT::_MM_HINT_T0"
+          "NOMINMAX",
+          "WIN32_LEAN_AND_MEAN"
         ]
       }, {
         "include_dirs": [
