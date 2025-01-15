@@ -26,7 +26,7 @@
           "/DWIN32",
           "/D_WINDOWS",
           "/EHsc",
-          "/FI\"src/native/win_compat.h\""
+          "/FI\"win_compat.h\""
         ]
       }
     },
@@ -34,7 +34,8 @@
       ['OS=="win"', {
         "include_dirs": [
           "<!@(node -p \"require('node-addon-api').include\")",
-          "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/include"
+          "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/include",
+          "src/native"
         ],
         "libraries": [
           "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/lib/hiredis.lib"
