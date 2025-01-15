@@ -1,6 +1,9 @@
 {
   "targets": [{
     "target_name": "hyperlimit",
+    "sources": [
+      "src/native/hyperlimit.cpp"
+    ],
     "cflags!": [ "-fno-exceptions" ],
     "cflags_cc!": [ "-fno-exceptions" ],
     "cflags": [ "-O3" ],
