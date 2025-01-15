@@ -54,7 +54,8 @@ jobs:
       if: matrix.os == 'windows-latest'
       shell: cmd
       run: |
-        node node_modules\prebuildify\bin.js --napi --strip
+        cd %CD%
+        node.exe "%CD%\node_modules\prebuildify\bin.js" --napi --strip
       env:
         VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
 
