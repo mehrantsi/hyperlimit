@@ -5,6 +5,7 @@ const rateLimit = require('../src/middleware-hyperexpress');
 describe('HyperExpress Middleware', () => {
     let app;
     let server;
+    let port;
 
     beforeEach(async () => {
         app = new HyperExpress.Server();
@@ -57,27 +58,43 @@ describe('HyperExpress Middleware', () => {
         });
 
         // Find a free port
-        const port = await new Promise((resolve) => {
+        port = await new Promise((resolve) => {
             const srv = require('http').createServer();
-            srv.listen(0, () => {
+            srv.listen(0, '127.0.0.1', () => {
                 const port = srv.address().port;
                 srv.close(() => resolve(port));
             });
         });
 
-        await app.listen(port);
-        server = app;
+        // Start server and wait for it to be ready
+        await new Promise((resolve, reject) => {
+            try {
+                app.listen(port, '127.0.0.1')
+                    .then(() => {
+                        server = app;
+                        // Give it a moment to fully initialize
+                        setTimeout(resolve, 100);
+                    })
+                    .catch(reject);
+            } catch (err) {
+                reject(err);
+            }
+        });
     });
 
     afterEach(async () => {
         if (server) {
-            await server.close();
+            await new Promise(resolve => {
+                server.close();
+                // Always resolve after a timeout since HyperExpress close is sync
+                setTimeout(resolve, 500);
+            });
         }
     });
 
     describe('Basic Rate Limiting', () => {
         it('should limit requests according to rate', async () => {
-            const baseUrl = `http://localhost:${server.port}`;
+            const baseUrl = `http://127.0.0.1:${port}`;
 
             // First 3 requests should succeed
             for (let i = 0; i < 3; i++) {
@@ -104,7 +121,7 @@ describe('HyperExpress Middleware', () => {
 
     describe('Protected Endpoint with Penalties', () => {
         it('should handle penalties and blocking', async () => {
-            const baseUrl = `http://localhost:${server.port}`;
+            const baseUrl = `http://127.0.0.1:${port}`;
 
             // Make requests until we get a penalty
             let gotPenalty = false;
@@ -122,7 +139,7 @@ describe('HyperExpress Middleware', () => {
 
     describe('Custom Rate Limiting', () => {
         it('should handle custom keys and bypass headers', async () => {
-            const baseUrl = `http://localhost:${server.port}`;
+            const baseUrl = `http://127.0.0.1:${port}`;
 
             // Test with custom key
             const userId = '123';
@@ -147,7 +164,7 @@ describe('HyperExpress Middleware', () => {
 
     describe('Rate Limit Headers', () => {
         it('should set correct rate limit headers', async () => {
-            const baseUrl = `http://localhost:${server.port}`;
+            const baseUrl = `http://127.0.0.1:${port}`;
             const res = await fetch(`${baseUrl}/basic`);
             
             assert(res.headers.get('x-ratelimit-limit'));
