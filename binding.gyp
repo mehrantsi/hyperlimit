@@ -27,10 +27,9 @@
           "/D_WINDOWS",
           "/EHsc",
           "/D__builtin_clzll=__lzcnt64",
-          "/D__builtin_prefetch=_mm_prefetch",
           "/FI\"intrin.h\"",
           "/FI\"xmmintrin.h\"",
-          "/D_MM_HINT_T0=_MM_HINT_T0"
+          "/D__builtin_prefetch(addr,...)=_mm_prefetch((const char*)(addr),_MM_HINT_T0)"
         ]
       }
     },
