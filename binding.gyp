@@ -26,7 +26,8 @@
           "/DWIN32",
           "/D_WINDOWS",
           "/EHsc",
-          "/FI\"win_compat.h\""
+          "/FI\"win_compat.h\"",
+          "/wd4200"
         ]
       }
     },
