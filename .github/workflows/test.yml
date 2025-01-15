@@ -23,22 +23,23 @@ jobs:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
 
-    - name: Install hiredis (Ubuntu)
+    - name: Install system dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libhiredis-dev
+        sudo apt-get install -y libhiredis-dev build-essential cmake
 
-    - name: Install hiredis (macOS)
+    - name: Install system dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install hiredis
+        brew install hiredis cmake
 
-    - name: Install hiredis (Windows)
+    - name: Install system dependencies (Windows)
       if: matrix.os == 'windows-latest'
       run: |
         vcpkg install hiredis:x64-windows
         echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+        choco install cmake -y
 
     - name: Install dependencies
       run: npm ci
