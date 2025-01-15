@@ -41,6 +41,10 @@ jobs:
         vcpkg install hiredis:x64-windows
         echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
         choco install cmake -y
+        # Add vcpkg include path to INCLUDE env var
+        echo "INCLUDE=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\include;$env:INCLUDE" >> $env:GITHUB_ENV
+        # Add defines for MSVC to replace GCC intrinsics
+        echo "CXXFLAGS=/D__builtin_clzll=_lzcnt_u64 /D__builtin_prefetch=_mm_prefetch" >> $env:GITHUB_ENV
 
     - name: Install dependencies
       run: npm ci
