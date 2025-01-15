@@ -54,10 +54,9 @@ jobs:
         npm run test:core
 
         # Run middleware tests
-        npm run test:middleware
-
-        # Run integration tests
-        npm run test:integration
+        npm run test:express
+        npm run test:fastify
+        npm run test:hyperexpress
 
     - name: Upload test coverage
       uses: actions/upload-artifact@v3
