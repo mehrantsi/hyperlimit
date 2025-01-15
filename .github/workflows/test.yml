@@ -54,8 +54,8 @@ jobs:
       if: matrix.os == 'windows-latest'
       shell: cmd
       run: |
-        cd %CD%
-        node.exe "%CD%\node_modules\prebuildify\bin.js" --napi --strip
+        cd /D "%GITHUB_WORKSPACE%"
+        node.exe node_modules\prebuildify\bin.js --napi --strip
       env:
         VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
 
