@@ -12,13 +12,18 @@ describe('HyperLimit Core Features', () => {
         it('should limit requests according to rate', async () => {
             limiter.createLimiter('test', 3, 1000); // 3 tokens per second
             
-            assert(limiter.tryRequest('test'));
-            assert(limiter.tryRequest('test'));
-            assert(limiter.tryRequest('test'));
-            assert(!limiter.tryRequest('test')); // Should be blocked
+            assert(limiter.tryRequest('test'), 'First request should succeed');
+            assert(limiter.tryRequest('test'), 'Second request should succeed');
+            assert(limiter.tryRequest('test'), 'Third request should succeed');
             
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            assert(limiter.tryRequest('test')); // Should be allowed after refill
+            // Fourth request should be blocked
+            assert(!limiter.tryRequest('test'), 'Fourth request should be blocked');
+            
+            // Wait for refill
+            await new Promise(resolve => setTimeout(resolve, 1100)); // Wait slightly more than 1 second
+            
+            // Should be allowed after refill
+            assert(limiter.tryRequest('test'), 'Request after refill should succeed');
         });
 
         it('should handle multiple keys independently', () => {
