@@ -137,6 +137,10 @@ jobs:
               '@hyperlimit/core': pkg.version,
               'express': '^4.17.1'
             };
+            delete pkg.scripts.install;
+            delete pkg.scripts.build;
+            delete pkg.gypfile;
+            delete pkg.binary;
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
           npm pack
@@ -156,6 +160,10 @@ jobs:
               '@hyperlimit/core': pkg.version,
               'fastify': '^4.0.0'
             };
+            delete pkg.scripts.install;
+            delete pkg.scripts.build;
+            delete pkg.gypfile;
+            delete pkg.binary;
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
           npm pack
@@ -175,6 +183,10 @@ jobs:
               '@hyperlimit/core': pkg.version,
               'hyper-express': '^6.0.0'
             };
+            delete pkg.scripts.install;
+            delete pkg.scripts.build;
+            delete pkg.gypfile;
+            delete pkg.binary;
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
           npm pack
