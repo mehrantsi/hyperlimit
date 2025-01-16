@@ -233,6 +233,7 @@ jobs:
             --title "HyperLimit v${VERSION}" \
             --notes-file release_notes.md \
             --draft=false \
+            --target $GITHUB_SHA \
             dist/hyperlimit/hyperlimit-core-${VERSION}.tgz \
             dist/hyperlimit-express/hyperlimit-express-${VERSION}.tgz \
             dist/hyperlimit-fastify/hyperlimit-fastify-${VERSION}.tgz \
