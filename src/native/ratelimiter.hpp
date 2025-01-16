@@ -153,8 +153,8 @@ private:
             // Calculate new limit
             int64_t newLimit = baseMaxTokens - reduction;
             
-            // Ensure we don't reduce below 10% of base limit
-            int64_t minLimit = std::max((baseMaxTokens + 9) / 10, 1LL);
+            // Calculate minimum limit (10% of base limit)
+            int64_t minLimit = std::max(static_cast<int64_t>((baseMaxTokens + 9) / 10), static_cast<int64_t>(1));
             return std::max(newLimit, minLimit);
         }
     };
