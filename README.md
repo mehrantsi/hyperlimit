@@ -1,6 +1,6 @@
 # HyperLimit
 
-[![npm version](https://badge.fury.io/js/hyperlimit.svg)](https://badge.fury.io/js/hyperlimit)
+[![npm version](https://badge.fury.io/js/%40hyperlimit%2Fcore.svg)](https://badge.fury.io/js/%40hyperlimit%2Fcore)
 [![Build and Release](https://github.com/mehrantsi/hyperlimit/actions/workflows/build.yml/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions/workflows/build.yml)
 [![Test](https://github.com/mehrantsi/hyperlimit/actions/workflows/test.yml/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions/workflows/test.yml)
 
