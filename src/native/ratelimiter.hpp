@@ -598,13 +598,18 @@ public:
         int64_t nextRefill = lastRefill + entry->refillTimeMs;
         info.reset = nextRefill;
         
+        // Calculate retryAfter
         if (info.blocked) {
             int64_t blockedUntil = entry->blockUntil.load(std::memory_order_relaxed);
             if (blockedUntil > now) {
-                info.retryAfter = (blockedUntil - now) / 1000; // Convert to seconds
+                // Ensure we don't overflow and maintain a minimum retry time
+                int64_t retryMs = std::min(blockedUntil - now, INT64_MAX - now);
+                info.retryAfter = std::max(static_cast<int64_t>(1), retryMs / 1000);
             }
         } else if (info.remaining <= 0) {
-            info.retryAfter = (nextRefill - now) / 1000; // Convert to seconds
+            // For non-blocked rate limits, use the time until next refill
+            int64_t retryMs = std::min(nextRefill - now, INT64_MAX - now);
+            info.retryAfter = std::max(static_cast<int64_t>(1), retryMs / 1000);
         }
         
         return info;
