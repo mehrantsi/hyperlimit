@@ -86,17 +86,25 @@ jobs:
           scope: '@hyperlimit'
           always-auth: true
 
-      - name: Update version if manually triggered
-        if: github.event_name == 'workflow_dispatch'
+      - name: Set version
         shell: bash
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
-          echo "registry=https://registry.npmjs.org/" >> .npmrc
-          npm version ${{ github.event.inputs.version }}
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+          
+          # Get version from input or tag
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+          
+          # Update version in all package.json files
+          npm version $VERSION --no-git-tag-version
+          cd packages/express && npm version $VERSION --no-git-tag-version && cd ../..
+          cd packages/fastify && npm version $VERSION --no-git-tag-version && cd ../..
+          cd packages/hyperexpress && npm version $VERSION --no-git-tag-version && cd ../..
+          
+          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Download all prebuilds
         uses: actions/download-artifact@v3
@@ -122,6 +130,7 @@ jobs:
           node -e "
             const pkg = require('./package.json');
             pkg.name = '@hyperlimit/core';
+            pkg.version = '${RELEASE_VERSION}';
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
           # Install dependencies and build
@@ -130,10 +139,6 @@ jobs:
           npm pack
           cd ../..
 
-          # Get the core package version
-          CORE_VERSION=$(node -p "require('./package.json').version")
-          CORE_PACKAGE="dist/hyperlimit/hyperlimit-core-${CORE_VERSION}.tgz"
-
           # Create Express middleware package
           mkdir -p dist/hyperlimit-express
           cp -r packages/express/index.js packages/express/package.json README.md LICENSE dist/hyperlimit-express/
@@ -141,12 +146,13 @@ jobs:
           # Update package.json for Express middleware
           node -e "
             const pkg = require('./package.json');
+            pkg.version = '${RELEASE_VERSION}';
             pkg.dependencies = {
-              '@hyperlimit/core': 'file:../hyperlimit/hyperlimit-core-${CORE_VERSION}.tgz'
+              '@hyperlimit/core': '${RELEASE_VERSION}'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
-          npm install
+          npm install --registry=http://registry.npmjs.org
           npm pack
           cd ../..
 
@@ -157,12 +163,13 @@ jobs:
           # Update package.json for Fastify middleware
           node -e "
             const pkg = require('./package.json');
+            pkg.version = '${RELEASE_VERSION}';
             pkg.dependencies = {
-              '@hyperlimit/core': 'file:../hyperlimit/hyperlimit-core-${CORE_VERSION}.tgz'
+              '@hyperlimit/core': '${RELEASE_VERSION}'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
-          npm install
+          npm install --registry=http://registry.npmjs.org
           npm pack
           cd ../..
 
@@ -173,12 +180,13 @@ jobs:
           # Update package.json for HyperExpress middleware
           node -e "
             const pkg = require('./package.json');
+            pkg.version = '${RELEASE_VERSION}';
             pkg.dependencies = {
-              '@hyperlimit/core': 'file:../hyperlimit/hyperlimit-core-${CORE_VERSION}.tgz'
+              '@hyperlimit/core': '${RELEASE_VERSION}'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
-          npm install
+          npm install --registry=http://registry.npmjs.org
           npm pack
           cd ../..
 
@@ -200,11 +208,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
+          # Use version from environment variable
+          VERSION="${RELEASE_VERSION}"
           if [ -z "$VERSION" ]; then
-            # If not manually triggered, extract version from tag
-            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "Error: Version is not set"
+            exit 1
           fi
+          
+          echo "Creating release for version ${VERSION}"
           
           # Create release notes
           echo "# HyperLimit v${VERSION}" > release_notes.md
@@ -217,6 +228,14 @@ jobs:
           echo "" >> release_notes.md
           echo "## Changes" >> release_notes.md
           echo "- See commit history for detailed changes" >> release_notes.md
+          
+          # Verify tarballs exist
+          for pkg in hyperlimit-core hyperlimit-express hyperlimit-fastify hyperlimit-hyperexpress; do
+            if [ ! -f "dist/${pkg/-//}/${pkg}-${VERSION}.tgz" ]; then
+              echo "Error: Package tarball not found: dist/${pkg/-//}/${pkg}-${VERSION}.tgz"
+              exit 1
+            fi
+          done
           
           # Create GitHub Release
           gh release create "v${VERSION}" \
