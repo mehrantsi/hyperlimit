@@ -107,6 +107,12 @@ jobs:
           mkdir -p dist/hyperlimit
           cp -r prebuilds package.json README.md LICENSE dist/hyperlimit/
           cd dist/hyperlimit
+          # Update package.json for core package
+          node -e "
+            const pkg = require('./package.json');
+            pkg.name = '@hyperlimit/core';
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
           npm pack
           cd ../..
 
@@ -117,11 +123,11 @@ jobs:
           # Update package.json for Express middleware
           node -e "
             const pkg = require('./package.json');
-            pkg.name = 'hyperlimit-express';
+            pkg.name = '@hyperlimit/express';
             pkg.description = 'Express middleware for HyperLimit rate limiter';
             pkg.main = 'middleware-express.js';
             pkg.dependencies = {
-              'hyperlimit': pkg.version,
+              '@hyperlimit/core': pkg.version,
               'express': '^4.17.1'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
@@ -136,11 +142,11 @@ jobs:
           # Update package.json for Fastify middleware
           node -e "
             const pkg = require('./package.json');
-            pkg.name = 'hyperlimit-fastify';
+            pkg.name = '@hyperlimit/fastify';
             pkg.description = 'Fastify middleware for HyperLimit rate limiter';
             pkg.main = 'middleware-fastify.js';
             pkg.dependencies = {
-              'hyperlimit': pkg.version,
+              '@hyperlimit/core': pkg.version,
               'fastify': '^4.0.0'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
@@ -155,11 +161,11 @@ jobs:
           # Update package.json for HyperExpress middleware
           node -e "
             const pkg = require('./package.json');
-            pkg.name = 'hyperlimit-hyperexpress';
+            pkg.name = '@hyperlimit/hyperexpress';
             pkg.description = 'HyperExpress middleware for HyperLimit rate limiter';
             pkg.main = 'middleware-hyperexpress.js';
             pkg.dependencies = {
-              'hyperlimit': pkg.version,
+              '@hyperlimit/core': pkg.version,
               'hyper-express': '^6.0.0'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));

@@ -1,5 +1,5 @@
 {
-  "name": "hyperlimit",
+  "name": "@hyperlimit/core",
   "version": "1.0.0",
   "description": "High-performance rate limiter with advanced features",
   "main": "index.js",
