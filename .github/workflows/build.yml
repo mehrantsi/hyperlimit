@@ -184,7 +184,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
           NPM_CONFIG_USERCONFIG: /Users/runner/work/_temp/.npmrc
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          # Ensure proper npm authentication
+          npm config set //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+          npm config set registry https://registry.npmjs.org/
+          npm config list
+          
+          # Publish packages
           cd dist/hyperlimit && npm publish --access public
           cd ../hyperlimit-express && npm publish --access public
           cd ../hyperlimit-fastify && npm publish --access public
