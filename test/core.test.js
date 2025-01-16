@@ -66,20 +66,20 @@ describe('HyperLimit Core Features', () => {
 
     describe('Block Duration', () => {
         it('should block requests for specified duration', async () => {
-            limiter.createLimiter('block', 2, 1000, false, 500); // 2 tokens/sec, 0.5s block
+            limiter.createLimiter('block', 2, 1000, false, 1000); // 2 tokens/sec, 1s block
             
             assert(limiter.tryRequest('block'));
             assert(limiter.tryRequest('block'));
             assert(!limiter.tryRequest('block')); // Exceeded limit, triggers block
             
-            // Wait 250ms - still should be blocked
-            await new Promise(resolve => setTimeout(resolve, 250));
+            // Wait 500ms - still should be blocked
+            await new Promise(resolve => setTimeout(resolve, 500));
             assert(!limiter.tryRequest('block'));
             
-            // Wait another 300ms - block should be lifted
-            await new Promise(resolve => setTimeout(resolve, 300));
+            // Wait another 600ms - block should be lifted (total 1100ms)
+            await new Promise(resolve => setTimeout(resolve, 600));
             assert(limiter.tryRequest('block'));
-        }).timeout(1000); // Set timeout to 1s
+        }).timeout(2000); // Set timeout to 2s
     });
 
     describe('Dynamic Rate Limits', () => {

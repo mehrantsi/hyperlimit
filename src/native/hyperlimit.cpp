@@ -200,29 +200,26 @@ private:
 
     Napi::Value GetRateLimitInfo(const Napi::CallbackInfo& info) {
         Napi::Env env = info.Env();
-
+        
         if (info.Length() < 1 || !info[0].IsString()) {
-            Napi::TypeError::New(env, "Wrong arguments").ThrowAsJavaScriptException();
+            Napi::TypeError::New(env, "String expected").ThrowAsJavaScriptException();
             return env.Null();
         }
-
-        std::string key = info[0].As<Napi::String>().Utf8Value();
-
-        try {
-            auto limitInfo = rateLimiter->getRateLimitInfo(key);
-            auto result = Napi::Object::New(env);
-            result.Set("limit", limitInfo.limit);
-            result.Set("remaining", limitInfo.remaining);
-            result.Set("reset", limitInfo.reset);
-            result.Set("blocked", limitInfo.blocked);
-            if (limitInfo.retryAfter > 0) {
-                result.Set("retryAfter", limitInfo.retryAfter);
-            }
-            return result;
-        } catch (const std::exception& e) {
-            Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
-            return env.Null();
+        
+        std::string key = info[0].As<Napi::String>();
+        auto hyperlimit = Unwrap(info.This().As<Napi::Object>());
+        auto limitInfo = hyperlimit->rateLimiter->getRateLimitInfo(key);
+        
+        auto result = Napi::Object::New(env);
+        result.Set("limit", Napi::Number::New(env, limitInfo.limit));
+        result.Set("remaining", Napi::Number::New(env, limitInfo.remaining));
+        result.Set("reset", Napi::Number::New(env, limitInfo.reset));
+        result.Set("blocked", Napi::Boolean::New(env, limitInfo.blocked));
+        if (limitInfo.retryAfter > 0) {
+            result.Set("retryAfter", Napi::Number::New(env, limitInfo.retryAfter));
         }
+        
+        return result;
     }
 
     Napi::Value AddPenalty(const Napi::CallbackInfo& info) {

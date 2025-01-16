@@ -136,16 +136,26 @@ private:
         int64_t calculateDynamicLimit() const noexcept {
             if (maxPenaltyPoints <= 0) return baseMaxTokens;
             
-            int64_t points = penaltyPoints.load(std::memory_order_relaxed);
+            int64_t points = penaltyPoints.load(std::memory_order_acquire);
             if (points <= 0) return baseMaxTokens;
             
-            // Linear reduction: each penalty point reduces by (baseMaxTokens / maxPenaltyPoints)
-            double reduction = static_cast<double>(points) / maxPenaltyPoints;
-            int64_t newLimit = static_cast<int64_t>(baseMaxTokens * (1.0 - reduction));
+            // Ensure points don't exceed maxPenaltyPoints
+            points = std::min(points, maxPenaltyPoints);
+            
+            // Using integer arithmetic for more precise control
+            // Each penalty point reduces the limit by (baseMaxTokens / maxPenaltyPoints)
+            int64_t reduction = (points * baseMaxTokens) / maxPenaltyPoints;
+            
+            // Cap reduction at 90%
+            int64_t maxReduction = (baseMaxTokens * 9) / 10;
+            reduction = std::min(reduction, maxReduction);
+            
+            // Calculate new limit
+            int64_t newLimit = baseMaxTokens - reduction;
             
             // Ensure we don't reduce below 10% of base limit
-            int64_t minLimit = baseMaxTokens / 10;
-            return std::max(minLimit, newLimit);
+            int64_t minLimit = std::max((baseMaxTokens + 9) / 10, 1LL);
+            return std::max(newLimit, minLimit);
         }
     };
 
@@ -221,37 +231,53 @@ private:
 
     void refillTokens(Entry& entry) noexcept {
         int64_t now = getCurrentTimeMs();
-        int64_t lastRefill = entry.lastRefill.load(std::memory_order_relaxed);
-        int64_t timePassed = now - lastRefill;
+        int64_t lastRefill;
+        int64_t currentTokens;
+        int64_t dynamicLimit;
 
-        if (timePassed > 0) {
-            if (entry.lastRefill.compare_exchange_strong(lastRefill, now,
-                std::memory_order_acq_rel, std::memory_order_relaxed)) {
+        do {
+            lastRefill = entry.lastRefill.load(std::memory_order_acquire);
+            int64_t timePassed = now - lastRefill;
+
+            if (timePassed < entry.refillTimeMs && !entry.isSlidingWindow) {
+                return;
+            }
+
+            // Calculate dynamic limit first to ensure consistency
+            dynamicLimit = entry.calculateDynamicLimit();
+            currentTokens = entry.tokens.load(std::memory_order_acquire);
+
+            // For sliding window, calculate exact token amount without floating point
+            if (entry.isSlidingWindow) {
+                // Use integer arithmetic to avoid floating point errors
+                int64_t tokensToAdd = (dynamicLimit * timePassed) / entry.refillTimeMs;
+                int64_t newTokens = std::min(currentTokens + tokensToAdd, dynamicLimit);
                 
-                // Update dynamic rate limit
-                int64_t dynamicLimit = entry.calculateDynamicLimit();
-                entry.dynamicMaxTokens.store(dynamicLimit, std::memory_order_relaxed);
-
-                if (entry.isSlidingWindow) {
-                    int64_t currentTokens = entry.tokens.load(std::memory_order_relaxed);
-                    double refillRatio = static_cast<double>(timePassed) / entry.refillTimeMs;
-                    int64_t tokensToAdd = static_cast<int64_t>(dynamicLimit * refillRatio);
-                    int64_t newTokens = std::min(currentTokens + tokensToAdd, dynamicLimit);
+                if (entry.lastRefill.compare_exchange_strong(lastRefill, now,
+                    std::memory_order_acq_rel, std::memory_order_acquire)) {
+                    entry.dynamicMaxTokens.store(dynamicLimit, std::memory_order_release);
                     entry.tokens.store(newTokens, std::memory_order_release);
-                } else {
+                    return;
+                }
+            } else {
+                // For fixed window, just reset to dynamic limit
+                if (entry.lastRefill.compare_exchange_strong(lastRefill, now,
+                    std::memory_order_acq_rel, std::memory_order_acquire)) {
+                    entry.dynamicMaxTokens.store(dynamicLimit, std::memory_order_release);
                     entry.tokens.store(dynamicLimit, std::memory_order_release);
+                    return;
                 }
             }
-        }
+        } while (true); // Keep trying until we succeed
     }
 
     bool isBlocked(Entry& entry) noexcept {
-        int64_t blockedUntil = entry.blockUntil.load(std::memory_order_relaxed);
+        int64_t blockedUntil = entry.blockUntil.load(std::memory_order_acquire);
         if (blockedUntil == 0) return false;
         
         int64_t now = getCurrentTimeMs();
         if (now >= blockedUntil) {
-            entry.blockUntil.store(0, std::memory_order_relaxed);
+            entry.blockUntil.store(0, std::memory_order_release);
             return false;
         }
         return true;
@@ -467,13 +493,15 @@ public:
         }
 
         Entry* entry = findEntry(key);
-        if (!entry || !entry->valid.load(std::memory_order_relaxed)) {
+        if (!entry || !entry->valid.load(std::memory_order_acquire)) {
             metrics.blockedRequests.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
 
         // Check if blocked
-        if (isBlocked(*entry)) {
+        int64_t now = getCurrentTimeMs();
+        int64_t blockedUntil = entry->blockUntil.load(std::memory_order_acquire);
+        if (blockedUntil > now) {
             metrics.blockedRequests.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
@@ -497,13 +525,8 @@ public:
         // Try to consume a local token
         int64_t currentTokens;
         do {
-            currentTokens = entry->tokens.load(std::memory_order_relaxed);
+            currentTokens = entry->tokens.load(std::memory_order_acquire);
             if (currentTokens <= 0) {
-                // Set block duration if specified
-                if (entry->blockDurationMs > 0) {
-                    int64_t now = getCurrentTimeMs();
-                    entry->blockUntil.store(now + entry->blockDurationMs, std::memory_order_release);
-                }
                 // If we acquired a distributed token but failed locally, release it
                 if (distributedStorage && !entry->distributedKey.empty()) {
                     try {
@@ -512,11 +535,15 @@ public:
                         // Ignore Redis errors here
                     }
                 }
+                // Set block duration if specified
+                if (entry->blockDurationMs > 0) {
+                    entry->blockUntil.store(now + entry->blockDurationMs, std::memory_order_release);
+                }
                 metrics.blockedRequests.fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
         } while (!entry->tokens.compare_exchange_weak(currentTokens, currentTokens - 1,
-                std::memory_order_acq_rel, std::memory_order_relaxed));
+                std::memory_order_acq_rel, std::memory_order_acquire));
 
         metrics.allowedRequests.fetch_add(1, std::memory_order_relaxed);
         if (entry->penaltyPoints.load(std::memory_order_relaxed) > 0) {
@@ -583,36 +610,38 @@ public:
 
     // HTTP integration methods
     RateLimitInfo getRateLimitInfo(const std::string& key) noexcept {
-        RateLimitInfo info = { 0, 0, 0, false, 0 };
-        auto entry = findEntry(key);
-        if (!entry || !entry->valid.load(std::memory_order_relaxed)) {
-            return info;
+        Entry* entry = findEntry(key);
+        if (!entry || !entry->valid.load(std::memory_order_acquire)) {
+            return RateLimitInfo{0, 0, 0, false, 0};
         }
-
+        
+        // Refill tokens first to get accurate count
+        refillTokens(*entry);
+        
+        int64_t dynamicLimit = entry->calculateDynamicLimit();
+        int64_t currentTokens = entry->tokens.load(std::memory_order_acquire);
+        int64_t blockedUntil = entry->blockUntil.load(std::memory_order_acquire);
         int64_t now = getCurrentTimeMs();
-        info.blocked = isBlocked(*entry);
-        info.limit = entry->dynamicMaxTokens.load(std::memory_order_relaxed);
-        info.remaining = entry->tokens.load(std::memory_order_relaxed);
         
-        int64_t lastRefill = entry->lastRefill.load(std::memory_order_relaxed);
-        int64_t nextRefill = lastRefill + entry->refillTimeMs;
-        info.reset = nextRefill;
+        bool blocked = blockedUntil > now;
+        int64_t retryAfter = blocked ? (blockedUntil - now) / 1000 : 0;
         
-        // Calculate retryAfter
-        if (info.blocked) {
-            int64_t blockedUntil = entry->blockUntil.load(std::memory_order_relaxed);
-            if (blockedUntil > now) {
-                // Ensure we don't overflow and maintain a minimum retry time
-                int64_t retryMs = std::min(blockedUntil - now, INT64_MAX - now);
-                info.retryAfter = std::max(static_cast<int64_t>(1), retryMs / 1000);
-            }
-        } else if (info.remaining <= 0) {
-            // For non-blocked rate limits, use the time until next refill
-            int64_t retryMs = std::min(nextRefill - now, INT64_MAX - now);
-            info.retryAfter = std::max(static_cast<int64_t>(1), retryMs / 1000);
+        // If we're blocked, remaining should be 0
+        if (blocked) {
+            currentTokens = 0;
         }
         
-        return info;
+        // Calculate reset time
+        int64_t lastRefill = entry->lastRefill.load(std::memory_order_acquire);
+        int64_t reset = lastRefill + entry->refillTimeMs;
+        
+        return RateLimitInfo{
+            dynamicLimit,
+            std::max(int64_t(0), currentTokens),
+            reset,
+            blocked,
+            retryAfter
+        };
     }
 
     // IP whitelist/blacklist management
