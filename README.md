@@ -12,11 +12,15 @@ High-performance native rate limiter for Node.js with lock-free design, optimize
 - 🔒 Lock-free design for high concurrency
 - 🎯 Per-key rate limiting with configurable windows
 - 💾 Memory-efficient implementation
-- 🔄 Automatic token refill
-- 🎭 Multiple independent rate limiters
-- 📊 Token tracking and statistics
 - 🛡️ Thread-safe operations
+- 🔄 Sliding window support
+- 🎭 Multiple independent rate limiters
+- 📊 Real-time monitoring and statistics
 - 🌐 Redis-based distributed rate limiting
+- 🎛️ Dynamic rate limiting per tenant/API key
+- ⚡ Bypass keys for trusted clients
+- 🎯 Penalty system for abuse prevention
+- 📈 Customizable key generation
 - 🔌 Framework-specific middleware packages
 
 ## Installation
@@ -37,7 +41,7 @@ npm install @hyperlimit/hyperexpress
 npm install hyperlimit
 ```
 
-## Usage
+## Basic Usage
 
 ### Express.js
 
@@ -47,31 +51,16 @@ const rateLimiter = require('@hyperlimit/express');
 
 const app = express();
 
-// Create middleware with configuration
-const limiter = rateLimiter({
-  maxTokens: 100,           // Maximum requests allowed
-  window: '1m',            // Time window (supports ms, s, m, h, d)
-  sliding: true,           // Use sliding window algorithm
-  block: '1h',            // Block duration after limit exceeded
-  maxPenalty: 10,         // Maximum penalty points
-  bypassHeader: 'X-API-Key', // Header to check for bypass keys
-  bypassKeys: ['secret1'],   // Keys that bypass rate limiting
-  keyGenerator: (req) => req.ip, // Custom key generator
-  onRejected: (req, res, info) => {  // Custom rejection handler
-    res.status(429).json(info);
-  }
-});
-
-// Apply middleware to routes
-app.get('/api', limiter, (req, res) => {
-  res.json({ message: 'API response' });
-});
-
-// Access rate limiter in route handlers
-app.get('/status', (req, res) => {
-  const info = req.rateLimit.limiter.getRateLimitInfo(req.rateLimit.key);
-  res.json(info);
-});
+app.use('/api', rateLimiter({
+    maxTokens: 100,           // Maximum requests allowed
+    window: '1m',            // Time window (supports ms, s, m, h, d)
+    sliding: true,           // Use sliding window algorithm
+    block: '30s',           // Block duration after limit exceeded
+    maxPenalty: 5,          // Maximum penalty points
+    bypassHeader: 'X-API-Key', // Header to check for bypass keys
+    bypassKeys: ['secret1'],   // Keys that bypass rate limiting
+    keyGenerator: (req) => req.ip // Custom key generator
+}));
 ```
 
 ### Fastify
@@ -82,24 +71,12 @@ const rateLimiter = require('@hyperlimit/fastify');
 
 const app = fastify();
 
-// Create middleware with configuration
-const limiter = rateLimiter({
-  maxTokens: 100,
-  window: '1m',
-  sliding: true,
-  block: '1h',
-  maxPenalty: 10,
-  bypassHeader: 'X-API-Key',
-  bypassKeys: ['secret1'],
-  keyGenerator: (req) => req.ip,
-  onRejected: (req, reply, info) => {
-    reply.code(429).send(info);
-  }
-});
-
-// Apply middleware to routes
-app.get('/api', { preHandler: limiter }, (req, reply) => {
-  reply.send({ message: 'API response' });
+app.register(async (instance) => {
+    instance.addHook('preHandler', rateLimiter({
+        maxTokens: 100,
+        window: '1m',
+        sliding: true
+    }));
 });
 ```
 
@@ -111,54 +88,176 @@ const rateLimiter = require('@hyperlimit/hyperexpress');
 
 const app = new HyperExpress.Server();
 
-// Create middleware with configuration
-const limiter = rateLimiter({
-  maxTokens: 100,
-  window: '1m',
-  sliding: true,
-  block: '1h',
-  maxPenalty: 10,
-  bypassHeader: 'X-API-Key',
-  bypassKeys: ['secret1'],
-  keyGenerator: (req) => req.ip,
-  onRejected: (req, res, info) => {
-    res.status(429).json(info);
-  }
+app.use(rateLimiter({
+    maxTokens: 100,
+    window: '1m',
+    sliding: true
+}));
+```
+
+### Core Package Usage
+
+For custom middleware or direct usage:
+
+```javascript
+const { HyperLimit } = require('hyperlimit');
+
+// Create a rate limiter instance
+const limiter = new HyperLimit({
+    bucketCount: 16384  // Optional: number of hash table buckets (default: 16384)
 });
 
-// Apply middleware to routes
-app.get('/api', limiter, (req, res) => {
-  res.json({ message: 'API response' });
+// Create a limiter for a specific endpoint/feature
+limiter.createLimiter(
+    'api:endpoint1',    // Unique identifier for this limiter
+    100,               // maxTokens: Maximum requests allowed
+    60000,             // window: Time window in milliseconds
+    true,              // sliding: Use sliding window
+    30000,             // block: Block duration in milliseconds
+    5                  // maxPenalty: Maximum penalty points
+);
+
+// Example usage in custom middleware
+function customRateLimiter(options = {}) {
+    const limiter = new HyperLimit();
+    const defaultKey = 'default';
+    
+    // Create the limiter with options
+    limiter.createLimiter(
+        defaultKey,
+        options.maxTokens || 100,
+        typeof options.window === 'string' 
+            ? parseTimeString(options.window) 
+            : (options.window || 60000),
+        options.sliding !== false,
+        typeof options.block === 'string'
+            ? parseTimeString(options.block)
+            : (options.block || 0),
+        options.maxPenalty || 0
+    );
+
+    // Return middleware function
+    return function(req, res, next) {
+        const key = options.keyGenerator?.(req) || req.ip;
+        const allowed = limiter.tryRequest(key);
+
+        if (!allowed) {
+            const info = limiter.getRateLimitInfo(key);
+            return res.status(429).json({
+                error: 'Too many requests',
+                retryAfter: Math.ceil(info.reset / 1000)
+            });
+        }
+
+        // Attach limiter to request for later use
+        req.rateLimit = { limiter, key };
+        next();
+    };
+}
+
+// Helper to parse time strings (e.g., '1m', '30s')
+function parseTimeString(timeStr) {
+    const units = { ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000 };
+    const match = timeStr.match(/^(\d+)([a-z]+)$/i);
+    if (!match) return parseInt(timeStr, 10);
+    const [, num, unit] = match;
+    return parseInt(num, 10) * (units[unit] || units.ms);
+}
+```
+
+## Advanced Features
+
+### 1. Tenant-Based Rate Limiting
+
+Perfect for SaaS applications with different tiers of service:
+
+```javascript
+// To simulate a database of tenant configurations
+const tenantConfigs = new Map([
+    ['basic-tier-key', {
+        name: 'Basic Tier',
+        endpoints: {
+            '/api/data': { maxTokens: 5, window: '10s' },
+            '/api/users': { maxTokens: 2, window: '10s' },
+            '*': { maxTokens: 10, window: '60s' }
+        }
+    }],
+    ['premium-tier-key', {
+        name: 'Premium Tier',
+        endpoints: {
+            '/api/data': { maxTokens: 20, window: '10s' },
+            '/api/users': { maxTokens: 10, window: '10s' },
+            '*': { maxTokens: 50, window: '60s' }
+        }
+    }]
+]);
+
+// Dynamic rate limiting middleware
+function dynamicRateLimit(tenantKey, endpoint) {
+    return rateLimiter({
+        maxTokens: tenantConfigs.get(tenantKey).endpoints[endpoint].maxTokens,
+        window: tenantConfigs.get(tenantKey).endpoints[endpoint].window,
+        keyGenerator: (req) => req.headers['x-api-key']
+    });
+}
+
+app.get('/api/data', authenticateTenant, dynamicRateLimit, (req, res) => {
+    res.json({ message: 'Rate limited based on tenant tier' });
 });
 ```
 
-### Distributed Rate Limiting with Redis
+### 2. Distributed Rate Limiting
 
-For distributed environments, HyperLimit supports Redis-based synchronization:
+For applications running across multiple servers:
 
 ```javascript
 const Redis = require('ioredis');
-const rateLimiter = require('@hyperlimit/express'); // or fastify/hyperexpress
 
-// Create Redis client
-const redis = new Redis({
-  host: 'localhost',
-  port: 6379
-});
-
-// Create middleware with Redis support
 const limiter = rateLimiter({
-  maxTokens: 100,
-  window: '1m',
-  sliding: true,
-  redis: redis  // Pass Redis client for distributed rate limiting
-});
-
-// The rate limits will now be synchronized across all instances
-app.get('/api', limiter, (req, res) => {
-  res.json({ message: 'Rate limited across all instances' });
+    maxTokens: 100,
+    window: '1m',
+    redis: new Redis({
+        host: 'localhost',
+        port: 6379,
+        prefix: 'rl:'
+    })
 });
 ```
+
+### 3. Penalty System
+
+Handle abuse and violations:
+
+```javascript
+app.post('/api/sensitive', limiter, (req, res) => {
+    if (violationDetected) {
+        // Add penalty points
+        req.rateLimit.limiter.addPenalty(req.rateLimit.key, 2);
+        return res.status(400).json({ error: 'Violation detected' });
+    }
+    
+    // Later, can remove penalties
+    req.rateLimit.limiter.removePenalty(req.rateLimit.key, 1);
+});
+```
+
+### 4. Monitoring and Statistics
+
+Track rate limiting status:
+
+```javascript
+app.get('/status', (req, res) => {
+    const info = req.rateLimit.limiter.getRateLimitInfo(req.rateLimit.key);
+    res.json({
+        limit: info.limit,
+        remaining: info.remaining,
+        reset: info.reset,
+        blocked: info.blocked
+    });
+});
+```
+
+### 5. Redis Integration Details
 
 When Redis is configured:
 - Rate limits are synchronized across all application instances
@@ -167,59 +266,66 @@ When Redis is configured:
 - Atomic operations ensure consistency
 - Minimal latency overhead
 
-## API Reference
+Redis configuration options:
+```javascript
+{
+    host: 'localhost',      // Redis host
+    port: 6379,            // Redis port
+    password: 'optional',   // Redis password
+    db: 0,                 // Redis database number
+    prefix: 'rl:',         // Key prefix for rate limit data
+    connectTimeout: 10000,  // Connection timeout in ms
+    maxRetriesPerRequest: 3 // Max retries per request
+}
+```
 
-### Middleware Options
+## Configuration Options
 
 ```typescript
 interface RateLimiterOptions {
-  maxTokens?: number;      // Maximum requests allowed (default: 100)
-  window?: string|number;  // Time window in ms or string (default: '1m')
-  sliding?: boolean;       // Use sliding window (default: true)
-  block?: string|number;   // Block duration after limit exceeded (default: '')
-  maxPenalty?: number;     // Maximum penalty points (default: 0)
-  key?: string;           // Rate limiter key (default: 'default')
-  bypassHeader?: string;  // Header to check for bypass keys
-  bypassKeys?: string[];  // Keys that bypass rate limiting
-  keyGenerator?: (req) => string;  // Custom key generator
-  onRejected?: (req, res, info) => void;  // Custom rejection handler
-  redis?: Redis;          // Redis client for distributed mode
-}
-
-interface RejectionInfo {
-  error: string;
-  retryAfter: number;    // Seconds until retry is allowed
-}
-```
-
-### Headers
-
-The middleware sets the following response headers:
-- `X-RateLimit-Limit`: Maximum requests allowed
-- `X-RateLimit-Remaining`: Remaining requests in current window
-- `X-RateLimit-Reset`: Time in seconds until the limit resets
-
-### Request Attachment
-
-The middleware attaches rate limit information to the request object:
-```typescript
-req.rateLimit = {
-  limiter: HyperLimit;  // Rate limiter instance
-  key: string;         // Current rate limiter key
+    // Core Options
+    maxTokens: number;      // Maximum requests allowed
+    window: string|number;  // Time window (e.g., '1m', '30s', or milliseconds)
+    sliding?: boolean;      // Use sliding window (default: true)
+    block?: string|number;  // Block duration after limit exceeded
+    
+    // Advanced Options
+    maxPenalty?: number;     // Maximum penalty points
+    bypassHeader?: string;   // Header for bypass keys
+    bypassKeys?: string[];   // List of bypass keys
+    keyGenerator?: (req) => string;  // Custom key generation
+    
+    // Distributed Options
+    redis?: Redis;           // Redis client for distributed mode
+    
+    // Response Handling
+    onRejected?: (req, res, info) => void;  // Custom rejection handler
 }
 ```
 
-## Performance
+## Response Headers
 
-HyperLimit is designed for high-performance scenarios:
+The middleware automatically sets these headers:
+- `X-RateLimit-Limit`: Maximum allowed requests
+- `X-RateLimit-Remaining`: Remaining requests in window
+- `X-RateLimit-Reset`: Seconds until limit resets
 
-- Lock-free atomic operations
+## Performance Benchmarks
+
+HyperLimit achieves exceptional performance through:
 - Native C++ implementation
-- Minimal memory footprint
+- Lock-free atomic operations
 - No external dependencies
 - Efficient token bucket algorithm
+- Minimal memory footprint
 
-### Benchmark Results
+| Test Type | Requests/sec | Latency (ms) |
+|-----------|-------------|--------------|
+| Single Key | ~9.1M | 0.11 |
+| Multi-Key | ~7.5M | 0.13 |
+| Concurrent | ~3.2M | 0.31 |
+
+### Detailed Benchmark Results
 
 Tests performed on a MacBook Pro with Apple M3 Max, 64GB RAM. Each test measures:
 - Single Key: Processing 1,000,000 requests through a single key
@@ -258,6 +364,44 @@ Key findings:
 - Sub-millisecond latency in most scenarios
 
 Note: These are synthetic benchmarks measuring raw performance without network overhead or real-world conditions. Actual performance will vary based on your specific use case and environment.
+
+## Examples
+
+Check out the [examples](./examples) directory for:
+- Basic rate limiting setups
+- Tenant-based configurations
+- Distributed rate limiting
+- Penalty system implementation
+- Monitoring and statistics
+- Custom key generation
+- Framework-specific implementations
+
+## Best Practices
+
+1. **Key Generation**:
+   - Use meaningful keys (e.g., `${req.ip}-${req.path}`)
+   - Consider user identity for authenticated routes
+   - Combine multiple factors for granular control
+
+2. **Window Selection**:
+   - Use sliding windows for smooth rate limiting
+   - Match window size to endpoint sensitivity
+   - Consider user experience when setting limits
+
+3. **Distributed Setup**:
+   - Enable Redis for multi-server deployments
+   - Set appropriate prefix to avoid key collisions
+   - Monitor Redis connection health
+
+4. **Penalty System**:
+   - Start with small penalties
+   - Implement gradual penalty removal
+   - Log penalty events for analysis
+
+5. **Monitoring**:
+   - Regularly check rate limit status
+   - Monitor bypass key usage
+   - Track penalty patterns
 
 ## Building from Source
 
