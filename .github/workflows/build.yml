@@ -92,9 +92,10 @@ jobs:
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          echo "registry=https://registry.npmjs.org/" >> .npmrc
           npm version ${{ github.event.inputs.version }}
         env:
-          NPM_CONFIG_USERCONFIG: /Users/runner/work/_temp/.npmrc
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
 
       - name: Download all prebuilds
@@ -182,12 +183,10 @@ jobs:
       - name: Publish packages
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-          NPM_CONFIG_USERCONFIG: /Users/runner/work/_temp/.npmrc
         run: |
-          # Ensure proper npm authentication
-          npm config set //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-          npm config set registry https://registry.npmjs.org/
-          npm config list
+          # Create local .npmrc file
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
+          echo "registry=https://registry.npmjs.org/" >> .npmrc
           
           # Publish packages
           cd dist/hyperlimit && npm publish --access public
