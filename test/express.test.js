@@ -1,7 +1,7 @@
 const express = require('express');
 const request = require('supertest');
 const assert = require('assert');
-const rateLimit = require('../src/middleware-express');
+const rateLimit = require('../packages/express');
 
 describe('Express Middleware', () => {
     let app;

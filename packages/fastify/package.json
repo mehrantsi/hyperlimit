@@ -18,9 +18,9 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@hyperlimit/core": "^1.0.0"
+    "@hyperlimit/core": "file:../.."
   },
   "peerDependencies": {
-    "fastify": "^4.x"
+    "fastify": "^5.x"
   }
 } 

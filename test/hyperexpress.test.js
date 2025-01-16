@@ -1,6 +1,7 @@
 const HyperExpress = require('hyper-express');
+const request = require('supertest');
 const assert = require('assert');
-const rateLimit = require('../src/middleware-hyperexpress');
+const rateLimit = require('../packages/hyperexpress');
 
 describe('HyperExpress Middleware', () => {
     let app;

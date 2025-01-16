@@ -1,8 +1,9 @@
 const fastify = require('fastify');
+const request = require('supertest');
 const assert = require('assert');
-const rateLimit = require('../src/middleware-fastify');
+const rateLimit = require('../packages/fastify');
 
-describe('Fastify Middleware', () => {
+describe('Fastify Plugin', () => {
     let app;
 
     beforeEach(async () => {

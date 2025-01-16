@@ -11,14 +11,14 @@
   },
   "keywords": [
     "rate-limiter",
-    "hyperexpress",
+    "hyper-express",
     "middleware",
     "performance"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@hyperlimit/core": "^1.0.0"
+    "@hyperlimit/core": "file:../.."
   },
   "peerDependencies": {
     "hyper-express": "^6.x"
