@@ -215,7 +215,7 @@ private:
             result.Set("remaining", limitInfo.remaining);
             result.Set("reset", limitInfo.reset);
             result.Set("blocked", limitInfo.blocked);
-            if (!limitInfo.retryAfter.empty()) {
+            if (limitInfo.retryAfter > 0) {
                 result.Set("retryAfter", limitInfo.retryAfter);
             }
             return result;

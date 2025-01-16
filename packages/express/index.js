@@ -60,14 +60,14 @@ function rateLimit(options = {}) {
             if (onRejected) {
                 return onRejected(req, res, {
                     error: 'Too many requests',
-                    retryAfter: info.retryAfter || Math.ceil((info.reset - Date.now()) / 1000)
+                    retryAfter: info.retryAfter || Math.ceil(windowMs / 1000)
                 });
             }
 
             // Default handling if no onRejected provided
             return res.status(429).json({
                 error: 'Too many requests',
-                retryAfter: info.retryAfter || Math.ceil((info.reset - Date.now()) / 1000)
+                retryAfter: info.retryAfter || Math.ceil(windowMs / 1000)
             });
         } catch (error) {
             return next(error);

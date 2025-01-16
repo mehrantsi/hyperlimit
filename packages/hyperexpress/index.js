@@ -60,7 +60,7 @@ function rateLimit(options = {}) {
             if (onRejected) {
                 return onRejected(req, res, {
                     error: 'Too many requests',
-                    retryAfter: info.retryAfter || Math.ceil((info.reset - Date.now()) / 1000)
+                    retryAfter: info.retryAfter || Math.ceil(windowMs / 1000)
                 });
             }
 
@@ -69,7 +69,7 @@ function rateLimit(options = {}) {
             res.header('Content-Type', 'application/json');
             res.send(Buffer.from(JSON.stringify({
                 error: 'Too many requests',
-                retryAfter: info.retryAfter || Math.ceil((info.reset - Date.now()) / 1000)
+                retryAfter: info.retryAfter || Math.ceil(windowMs / 1000)
             })));
         } catch (error) {
             return next(error);

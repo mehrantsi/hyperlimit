@@ -324,7 +324,7 @@ private:
         int64_t remaining;
         int64_t reset;
         bool blocked;
-        std::string retryAfter;
+        int64_t retryAfter;
     };
 
     struct Metrics {
@@ -583,8 +583,7 @@ public:
 
     // HTTP integration methods
     RateLimitInfo getRateLimitInfo(const std::string& key) noexcept {
-        RateLimitInfo info{-1, -1, -1, false, ""};
-        
+        RateLimitInfo info = { 0, 0, 0, false, 0 };
         auto entry = findEntry(key);
         if (!entry || !entry->valid.load(std::memory_order_relaxed)) {
             return info;
@@ -602,8 +601,10 @@ public:
         if (info.blocked) {
             int64_t blockedUntil = entry->blockUntil.load(std::memory_order_relaxed);
             if (blockedUntil > now) {
-                info.retryAfter = std::to_string((blockedUntil - now) / 1000); // Convert to seconds
+                info.retryAfter = (blockedUntil - now) / 1000; // Convert to seconds
             }
+        } else if (info.remaining <= 0) {
+            info.retryAfter = (nextRefill - now) / 1000; // Convert to seconds
         }
         
         return info;
