@@ -110,6 +110,10 @@ jobs:
 
       - name: Create packages
         run: |
+          # Install system dependencies for building
+          sudo apt-get update
+          sudo apt-get install -y libhiredis-dev build-essential cmake
+
           # Create core package
           mkdir -p dist/hyperlimit
           cp -r prebuilds package.json README.md LICENSE index.js binding.gyp src dist/hyperlimit/
