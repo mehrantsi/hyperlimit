@@ -65,10 +65,5 @@ jobs:
 
     - name: Run tests
       run: |
-        # Run core tests
-        npm run test:core
-
-        # Run middleware tests
-        npm run test:express
-        npm run test:fastify
-        npm run test:hyperexpress 
+        # Run all tests
+        npm test
