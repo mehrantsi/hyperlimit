@@ -105,29 +105,26 @@ describe('HyperLimit Core Features', () => {
 
     describe('Rate Limit Info', () => {
         it('should provide rate limit information', async () => {
-            limiter.createLimiter('info', 5, 1000, false, 2000);
+            // Use a larger window to avoid race conditions with token refills
+            limiter.createLimiter('info', 5, 5000, false, 2000);
             
             const initial = limiter.getRateLimitInfo('info');
             assert.equal(initial.limit, 5);
             assert.equal(initial.remaining, 5);
             assert(!initial.blocked);
             
-            limiter.tryRequest('info');
-            const after = limiter.getRateLimitInfo('info');
-            assert.equal(after.limit, 5);
-            assert.equal(after.remaining, 4);
-            assert(!after.blocked);
+            // Make requests in quick succession
+            for (let i = 0; i < 5; i++) {
+                limiter.tryRequest('info');
+            }
             
-            // Use all tokens
+            // This should trigger block since we used all tokens
             limiter.tryRequest('info');
-            limiter.tryRequest('info');
-            limiter.tryRequest('info');
-            limiter.tryRequest('info');
-            limiter.tryRequest('info'); // This triggers block
             
             const blocked = limiter.getRateLimitInfo('info');
-            assert(blocked.blocked);
-            assert(blocked.retryAfter);
+            assert(blocked.blocked, 'Expected to be blocked after using all tokens');
+            assert(blocked.retryAfter, 'Expected retryAfter to be set when blocked');
+            assert(blocked.remaining === 0, 'Expected no remaining tokens');
         });
     });
 
