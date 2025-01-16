@@ -10,10 +10,19 @@
     "test": "mocha test/**/*.test.js --timeout 5000"
   },
   "keywords": [
-    "rate-limiter",
     "hyper-express",
-    "middleware",
-    "performance"
+    "rate-limiter",
+    "ratelimiter",
+    "rate-limiting",
+    "rate-limiting-api",
+    "rate-limiting-middleware",
+    "rate-limiting-express",
+    "rate-limiting-fastify",
+    "rate-limiting-hyperexpress",
+    "high-performance",
+    "token-bucket",
+    "sliding-window",
+    "distributed"
   ],
   "author": "",
   "license": "MIT",

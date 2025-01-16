@@ -31,7 +31,14 @@
   },
   "keywords": [
     "rate-limiter",
-    "performance",
+    "ratelimiter",
+    "rate-limiting",
+    "rate-limiting-api",
+    "rate-limiting-middleware",
+    "rate-limiting-express",
+    "rate-limiting-fastify",
+    "rate-limiting-hyperexpress",
+    "high-performance",
     "token-bucket",
     "sliding-window",
     "distributed"
