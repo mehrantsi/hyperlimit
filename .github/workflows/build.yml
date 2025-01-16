@@ -112,7 +112,7 @@ jobs:
         run: |
           # Create core package
           mkdir -p dist/hyperlimit
-          cp -r prebuilds package.json README.md LICENSE index.js dist/hyperlimit/
+          cp -r prebuilds package.json README.md LICENSE index.js binding.gyp src dist/hyperlimit/
           cd dist/hyperlimit
           # Update package.json for core package
           node -e "
@@ -120,6 +120,9 @@ jobs:
             pkg.name = '@hyperlimit/core';
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+          # Install dependencies and build
+          npm install
+          npm run build
           npm pack
           cd ../..
 
@@ -135,6 +138,7 @@ jobs:
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+          npm install
           npm pack
           cd ../..
 
@@ -150,6 +154,7 @@ jobs:
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+          npm install
           npm pack
           cd ../..
 
@@ -165,6 +170,7 @@ jobs:
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+          npm install
           npm pack
           cd ../..
 
