@@ -10,7 +10,7 @@ describe('HyperLimit Core Features', () => {
 
     describe('Token Bucket Algorithm', () => {
         it('should limit requests according to rate', async () => {
-            limiter.createLimiter('test', 3, 1000); // 3 tokens per second
+            limiter.createLimiter('test', 3, 2000); // 3 tokens per 2 seconds
             
             assert(limiter.tryRequest('test'), 'First request should succeed');
             assert(limiter.tryRequest('test'), 'Second request should succeed');
@@ -19,8 +19,8 @@ describe('HyperLimit Core Features', () => {
             // Fourth request should be blocked
             assert(!limiter.tryRequest('test'), 'Fourth request should be blocked');
             
-            // Wait for refill
-            await new Promise(resolve => setTimeout(resolve, 1100)); // Wait slightly more than 1 second
+            // Wait for refill with some buffer
+            await new Promise(resolve => setTimeout(resolve, 2200)); // Wait slightly more than 2 seconds
             
             // Should be allowed after refill
             assert(limiter.tryRequest('test'), 'Request after refill should succeed');
