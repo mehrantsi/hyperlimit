@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
 
 jobs:
   build:
@@ -45,12 +51,33 @@ jobs:
           choco install cmake -y
 
       - name: Install dependencies
-        run: |
-          npm install -g prebuildify
-          npm ci
+        run: npm ci
 
-      - name: Build native module
-        run: prebuildify --napi
+      - name: Update version if manually triggered
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          npm version ${{ github.event.inputs.version }} --no-git-tag-version
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add package.json
+          git commit -m "Release v${{ github.event.inputs.version }}"
+          git tag "v${{ github.event.inputs.version }}"
+
+      - name: Build native module (Unix)
+        if: matrix.os != 'windows-latest'
+        run: npm run build
+        env:
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+
+      - name: Build native module (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: cmd
+        run: |
+          node-gyp rebuild
+          mkdir -p prebuilds\win32-x64
+          copy build\Release\hyperlimit.node prebuilds\win32-x64\node.napi.node
+          copy %VCPKG_ROOT%\installed\x64-windows\bin\*.dll build\Release\
+          copy %VCPKG_ROOT%\installed\x64-windows\bin\*.dll prebuilds\win32-x64\
         env:
           VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
 
