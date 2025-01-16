@@ -3,9 +3,20 @@
   "version": "1.0.0",
   "description": "High-performance rate limiter with advanced features",
   "main": "index.js",
+  "files": [
+    "prebuilds",
+    "binding.gyp",
+    "index.js",
+    "src/native",
+    "src/index.ts"
+  ],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "install": "node-gyp-build",
     "build": "prebuildify --napi --strip",
+    "prepublishOnly": "npm run build",
     "pretest": "npm run build",
     "test": "mocha test/**/*.test.js --timeout 5000",
     "test:core": "mocha test/core.test.js --timeout 5000",

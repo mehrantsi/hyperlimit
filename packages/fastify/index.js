@@ -1,4 +1,4 @@
-const { HyperLimit } = require('node-gyp-build')(__dirname + '/..');
+const { HyperLimit } = require('@hyperlimit/core');
 
 function rateLimit(options = {}) {
     const {
@@ -25,54 +25,53 @@ function rateLimit(options = {}) {
     // Create limiter for this route
     limiter.createLimiter(key, maxTokens, windowMs, sliding, blockMs, maxPenalty);
 
-    return function rateLimitMiddleware(req, res, next) {
+    return async function rateLimitMiddleware(request, reply) {
         try {
             // Check bypass keys if configured
             if (bypassHeader) {
-                const bypassKey = req.headers[bypassHeader.toLowerCase()];
+                const bypassKey = request.headers[bypassHeader.toLowerCase()];
                 if (bypassKeys.includes(bypassKey)) {
-                    return next();
+                    return;
                 }
             }
 
             // Generate key if custom generator provided
             const clientKey = keyGenerator ? 
-                keyGenerator(req) : 
-                req.ip;
+                keyGenerator(request) : 
+                request.ip;
 
             // Get rate limit info before request
             const info = limiter.getRateLimitInfo(key);
             
             // Set rate limit headers
-            res.header('X-RateLimit-Limit', String(info.limit));
-            res.header('X-RateLimit-Remaining', String(Math.max(0, info.remaining)));
-            res.header('X-RateLimit-Reset', String(Math.ceil(info.reset / 1000))); // Convert to seconds
+            reply.header('X-RateLimit-Limit', String(info.limit));
+            reply.header('X-RateLimit-Remaining', String(Math.max(0, info.remaining)));
+            reply.header('X-RateLimit-Reset', String(Math.ceil(info.reset / 1000))); // Convert to seconds
 
             // Attach limiter to request for potential use in route handlers
-            req.rateLimit = { limiter, key };
+            request.rateLimit = { limiter, key };
 
             const allowed = limiter.tryRequest(key, clientKey);
             if (allowed) {
-                return next();
+                return;
             }
 
             // Return rejection info to be handled by custom handler
             if (onRejected) {
-                return onRejected(req, res, {
+                return onRejected(request, reply, {
                     error: 'Too many requests',
                     retryAfter: info.retryAfter || Math.ceil((info.reset - Date.now()) / 1000)
                 });
             }
 
             // Default handling if no onRejected provided
-            res.status(429);
-            res.header('Content-Type', 'application/json');
-            res.send(Buffer.from(JSON.stringify({
+            reply.code(429).send({
                 error: 'Too many requests',
                 retryAfter: info.retryAfter || Math.ceil((info.reset - Date.now()) / 1000)
-            })));
+            });
         } catch (error) {
-            return next(error);
+            request.log.error(error);
+            throw error;
         }
     };
 }
