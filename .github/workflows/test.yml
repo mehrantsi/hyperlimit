@@ -57,6 +57,8 @@ jobs:
         node-gyp rebuild
         mkdir -p prebuilds\win32-x64
         copy build\Release\hyperlimit.node prebuilds\win32-x64\node.napi.node
+        copy %VCPKG_ROOT%\installed\x64-windows\bin\*.dll build\Release\
+        copy %VCPKG_ROOT%\installed\x64-windows\bin\*.dll prebuilds\win32-x64\
       env:
         VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
 
