@@ -130,6 +130,10 @@ jobs:
           npm pack
           cd ../..
 
+          # Get the core package version
+          CORE_VERSION=$(node -p "require('./package.json').version")
+          CORE_PACKAGE="dist/hyperlimit/hyperlimit-core-${CORE_VERSION}.tgz"
+
           # Create Express middleware package
           mkdir -p dist/hyperlimit-express
           cp -r packages/express/index.js packages/express/package.json README.md LICENSE dist/hyperlimit-express/
@@ -138,7 +142,7 @@ jobs:
           node -e "
             const pkg = require('./package.json');
             pkg.dependencies = {
-              '@hyperlimit/core': pkg.version
+              '@hyperlimit/core': 'file:../hyperlimit/hyperlimit-core-${CORE_VERSION}.tgz'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
@@ -154,7 +158,7 @@ jobs:
           node -e "
             const pkg = require('./package.json');
             pkg.dependencies = {
-              '@hyperlimit/core': pkg.version
+              '@hyperlimit/core': 'file:../hyperlimit/hyperlimit-core-${CORE_VERSION}.tgz'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
@@ -170,7 +174,7 @@ jobs:
           node -e "
             const pkg = require('./package.json');
             pkg.dependencies = {
-              '@hyperlimit/core': pkg.version
+              '@hyperlimit/core': 'file:../hyperlimit/hyperlimit-core-${CORE_VERSION}.tgz'
             };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
