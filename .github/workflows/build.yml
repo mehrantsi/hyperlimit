@@ -18,10 +18,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: [18.x, 20.x]
-        include:
-          - os: ubuntu-latest
-            node-version: 20.x
-            is_primary: true
 
     steps:
       - uses: actions/checkout@v4
@@ -30,9 +26,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          registry-url: 'https://registry.npmjs.org'
-          scope: '@hyperlimit'
-          always-auth: true
 
       - name: Install system dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
@@ -55,17 +48,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Update version if manually triggered
-        if: github.event_name == 'workflow_dispatch'
-        shell: bash
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          npm version ${{ github.event.inputs.version }}
-        env:
-          NPM_CONFIG_USERCONFIG: /Users/runner/work/_temp/.npmrc
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
-
       - name: Build native module (Unix)
         if: matrix.os != 'windows-latest'
         run: npm run build
@@ -87,24 +69,45 @@ jobs:
       - name: Upload prebuilt binaries
         uses: actions/upload-artifact@v3
         with:
-          name: prebuilds-${{ matrix.os }}
+          name: prebuilds-${{ matrix.os }}-${{ matrix.node-version }}
           path: prebuilds/
 
-      # Only create and publish packages from Ubuntu
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@hyperlimit'
+          always-auth: true
+
+      - name: Update version if manually triggered
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          npm version ${{ github.event.inputs.version }}
+        env:
+          NPM_CONFIG_USERCONFIG: /Users/runner/work/_temp/.npmrc
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+
       - name: Download all prebuilds
-        if: matrix.is_primary
         uses: actions/download-artifact@v3
         with:
           path: prebuilds-all
 
       - name: Merge prebuilds
-        if: matrix.is_primary
         run: |
           mkdir -p prebuilds
           cp -r prebuilds-all/*/* prebuilds/
 
       - name: Create packages
-        if: matrix.is_primary
         run: |
           # Create core package
           mkdir -p dist/hyperlimit
@@ -177,7 +180,6 @@ jobs:
           cd ../..
 
       - name: Publish packages
-        if: matrix.is_primary
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
           NPM_CONFIG_USERCONFIG: /Users/runner/work/_temp/.npmrc
