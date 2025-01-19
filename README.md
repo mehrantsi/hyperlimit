@@ -51,32 +51,107 @@ const rateLimiter = require('@hyperlimit/express');
 
 const app = express();
 
-app.use('/api', rateLimiter({
-    maxTokens: 100,           // Maximum requests allowed
-    window: '1m',            // Time window (supports ms, s, m, h, d)
-    sliding: true,           // Use sliding window algorithm
-    block: '30s',           // Block duration after limit exceeded
-    maxPenalty: 5,          // Maximum penalty points
-    bypassHeader: 'X-API-Key', // Header to check for bypass keys
-    bypassKeys: ['secret1'],   // Keys that bypass rate limiting
-    keyGenerator: (req) => req.ip // Custom key generator
-}));
+// Example routes using direct configuration
+app.get('/api/public', rateLimiter({
+    key: 'public',
+    maxTokens: 100,
+    window: '1m',
+    sliding: true,
+    block: '30s'
+}), (req, res) => {
+    res.json({ message: 'Public API response' });
+});
+
+// Protected route with more options
+app.get('/api/protected', rateLimiter({
+    key: 'protected',
+    maxTokens: 5,
+    window: '1m',
+    sliding: true,
+    block: '5m',
+    maxPenalty: 3,
+    onRejected: (req, res, info) => {
+        res.status(429).json({
+            error: 'Rate limit exceeded',
+            message: 'Please try again later',
+            retryAfter: info.retryAfter
+        });
+    }
+}), (req, res) => {
+    res.json({ message: 'Protected API response' });
+});
+
+// Custom rate limit with bypass keys
+app.get('/api/custom', rateLimiter({
+    key: 'custom',
+    maxTokens: 20,
+    window: '30s',
+    sliding: true,
+    block: '1m',
+    keyGenerator: req => `${req.ip}-${req.query.userId}`,
+    bypassHeader: 'X-Custom-Key',
+    bypassKeys: ['special-key']
+}), (req, res) => {
+    res.json({ message: 'Custom API response' });
+});
 ```
 
 ### Fastify
 
 ```javascript
-const fastify = require('fastify');
+const fastify = require('fastify')();
 const rateLimiter = require('@hyperlimit/fastify');
 
-const app = fastify();
-
-app.register(async (instance) => {
-    instance.addHook('preHandler', rateLimiter({
+fastify.get('/api/public', {
+    preHandler: rateLimiter({
+        key: 'public',
         maxTokens: 100,
         window: '1m',
-        sliding: true
-    }));
+        sliding: true,
+        block: '30s'
+    }),
+    handler: async (request, reply) => {
+        return { message: 'Public API response' };
+    }
+});
+
+// Protected route with more options
+fastify.get('/api/protected', {
+    preHandler: rateLimiter({
+        key: 'protected',
+        maxTokens: 5,
+        window: '1m',
+        sliding: true,
+        block: '5m',
+        maxPenalty: 3,
+        onRejected: (request, reply, info) => {
+            reply.code(429).send({
+                error: 'Rate limit exceeded',
+                message: 'Please try again later',
+                retryAfter: info.retryAfter
+            });
+        }
+    }),
+    handler: async (request, reply) => {
+        return { message: 'Protected API response' };
+    }
+});
+
+// Custom rate limit with bypass keys
+fastify.get('/api/custom', {
+    preHandler: rateLimiter({
+        key: 'custom',
+        maxTokens: 20,
+        window: '30s',
+        sliding: true,
+        block: '1m',
+        keyGenerator: req => `${req.ip}-${req.query.userId}`,
+        bypassHeader: 'X-Custom-Key',
+        bypassKeys: ['special-key']
+    }),
+    handler: async (request, reply) => {
+        return { message: 'Custom API response' };
+    }
 });
 ```
 
@@ -88,11 +163,49 @@ const rateLimiter = require('@hyperlimit/hyperexpress');
 
 const app = new HyperExpress.Server();
 
-app.use(rateLimiter({
+app.get('/api/public', rateLimiter({
+    key: 'public',
     maxTokens: 100,
     window: '1m',
-    sliding: true
-}));
+    sliding: true,
+    block: '30s'
+}), (req, res) => {
+    res.json({ message: 'Public API response' });
+});
+
+// Protected route with more options
+app.get('/api/protected', rateLimiter({
+    key: 'protected',
+    maxTokens: 5,
+    window: '1m',
+    sliding: true,
+    block: '5m',
+    maxPenalty: 3,
+    onRejected: (req, res, info) => {
+        res.status(429);
+        res.json({
+            error: 'Rate limit exceeded',
+            message: 'Please try again later',
+            retryAfter: info.retryAfter
+        });
+    }
+}), (req, res) => {
+    res.json({ message: 'Protected API response' });
+});
+
+// Custom rate limit with bypass keys
+app.get('/api/custom', rateLimiter({
+    key: 'custom',
+    maxTokens: 20,
+    window: '30s',
+    sliding: true,
+    block: '1m',
+    keyGenerator: req => `${req.ip}-${req.query.userId}`,
+    bypassHeader: 'X-Custom-Key',
+    bypassKeys: ['special-key']
+}), (req, res) => {
+    res.json({ message: 'Custom API response' });
+});
 ```
 
 ### Core Package Usage
@@ -172,37 +285,97 @@ function parseTimeString(timeStr) {
 Perfect for SaaS applications with different tiers of service:
 
 ```javascript
-// To simulate a database of tenant configurations
-const tenantConfigs = new Map([
-    ['basic-tier-key', {
-        name: 'Basic Tier',
-        endpoints: {
-            '/api/data': { maxTokens: 5, window: '10s' },
-            '/api/users': { maxTokens: 2, window: '10s' },
-            '*': { maxTokens: 10, window: '60s' }
-        }
-    }],
-    ['premium-tier-key', {
-        name: 'Premium Tier',
-        endpoints: {
-            '/api/data': { maxTokens: 20, window: '10s' },
-            '/api/users': { maxTokens: 10, window: '10s' },
-            '*': { maxTokens: 50, window: '60s' }
-        }
-    }]
-]);
+// Simulating a database of tenant configurations
+const tenantConfigs = new Map();
+const tenantLimiters = new Map();
 
-// Dynamic rate limiting middleware
-function dynamicRateLimit(tenantKey, endpoint) {
-    return rateLimiter({
-        maxTokens: tenantConfigs.get(tenantKey).endpoints[endpoint].maxTokens,
-        window: tenantConfigs.get(tenantKey).endpoints[endpoint].window,
+// Example tenant configurations
+tenantConfigs.set('tenant1-key', {
+    name: 'Basic Tier',
+    endpoints: {
+        '/api/data': { maxTokens: 5, window: '10s' },
+        '/api/users': { maxTokens: 2, window: '10s' },
+        '*': { maxTokens: 10, window: '60s' } // Default for unspecified endpoints
+    }
+});
+
+tenantConfigs.set('tenant2-key', {
+    name: 'Premium Tier',
+    endpoints: {
+        '/api/data': { maxTokens: 20, window: '10s' },
+        '/api/users': { maxTokens: 10, window: '10s' },
+        '*': { maxTokens: 50, window: '60s' }
+    }
+});
+
+// Helper to get or create rate limiter for tenant+endpoint
+function getTenantLimiter(tenantKey, endpoint) {
+    const cacheKey = `${tenantKey}:${endpoint}`;
+    
+    if (tenantLimiters.has(cacheKey)) {
+        return tenantLimiters.get(cacheKey);
+    }
+
+    const tenantConfig = tenantConfigs.get(tenantKey);
+    if (!tenantConfig) {
+        return null;
+    }
+
+    // Get endpoint specific config or fallback to default
+    const config = tenantConfig.endpoints[endpoint] || tenantConfig.endpoints['*'];
+    if (!config) {
+        return null;
+    }
+
+    const limiter = rateLimiter({
+        maxTokens: config.maxTokens,
+        window: config.window,
         keyGenerator: (req) => req.headers['x-api-key']
     });
+
+    tenantLimiters.set(cacheKey, limiter);
+    return limiter;
 }
 
-app.get('/api/data', authenticateTenant, dynamicRateLimit, (req, res) => {
-    res.json({ message: 'Rate limited based on tenant tier' });
+// Tenant authentication middleware
+function authenticateTenant(req, res, next) {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey) {
+        return res.status(401).json({ error: 'API key required' });
+    }
+
+    const config = tenantConfigs.get(apiKey);
+    if (!config) {
+        return res.status(401).json({ error: 'Invalid API key' });
+    }
+
+    req.tenant = {
+        apiKey,
+        config
+    };
+    next();
+}
+
+// Dynamic rate limiting middleware
+function dynamicRateLimit(req, res, next) {
+    const limiter = getTenantLimiter(req.tenant.apiKey, req.path);
+    if (!limiter) {
+        return res.status(500).json({ error: 'Rate limiter configuration error' });
+    }
+    
+    return limiter(req, res, next);
+}
+
+// Apply tenant authentication to all routes
+app.use(authenticateTenant);
+
+// API endpoints with dynamic rate limiting
+app.get('/api/data', dynamicRateLimit, (req, res) => {
+    res.json({
+        message: 'Data endpoint',
+        tenant: req.tenant.config.name,
+        path: req.path
+    });
 });
 ```
 
@@ -211,17 +384,76 @@ app.get('/api/data', authenticateTenant, dynamicRateLimit, (req, res) => {
 For applications running across multiple servers:
 
 ```javascript
-const Redis = require('ioredis');
+const { HyperLimit } = require('hyperlimit');
 
-const limiter = rateLimiter({
-    maxTokens: 100,
-    window: '1m',
-    redis: new Redis({
+// Create HyperLimit instance with Redis support
+const limiter = new HyperLimit({
+    bucketCount: 16384,
+    redis: {
         host: 'localhost',
         port: 6379,
         prefix: 'rl:'
-    })
+    }
 });
+
+// Configure rate limiter with a distributed key for global coordination
+limiter.createLimiter(
+    'api:endpoint1',      // Local identifier
+    100,                  // Total allowed requests across all servers
+    60000,               // 1 minute window
+    true,                // Use sliding window
+    0,                   // No block duration
+    0,                   // No penalties
+    'api:endpoint1:global' // Distributed key for Redis
+);
+
+// Use in your application
+app.get('/api/endpoint', (req, res) => {
+    const allowed = limiter.tryRequest('api:endpoint1');
+    if (!allowed) {
+        const info = limiter.getRateLimitInfo('api:endpoint1');
+        return res.status(429).json({
+            error: 'Rate limit exceeded',
+            retryAfter: Math.ceil(info.reset / 1000)
+        });
+    }
+    res.json({ message: 'Success' });
+});
+
+// Or use with middleware
+app.get('/api/endpoint', rateLimiter({
+    key: 'api:endpoint1',
+    maxTokens: 100,
+    window: '1m',
+    sliding: true,
+    redis: {
+        host: 'localhost',
+        port: 6379,
+        prefix: 'rl:'
+    }
+}), (req, res) => {
+    res.json({ message: 'Success' });
+});
+```
+
+When Redis is configured:
+- Rate limits are synchronized across all application instances
+- Tokens are stored and managed in Redis
+- Automatic fallback to local rate limiting if Redis is unavailable
+- Atomic operations ensure consistency
+- Minimal latency overhead
+
+Redis configuration options:
+```javascript
+{
+    host: 'localhost',      // Redis host
+    port: 6379,            // Redis port
+    password: 'optional',   // Redis password
+    db: 0,                 // Redis database number
+    prefix: 'rl:',         // Key prefix for rate limit data
+    connectTimeout: 10000,  // Connection timeout in ms
+    maxRetriesPerRequest: 3 // Max retries per request
+}
 ```
 
 ### 3. Penalty System
