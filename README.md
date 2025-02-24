@@ -4,7 +4,6 @@
 [![Build and Release](https://github.com/mehrantsi/hyperlimit/actions/workflows/build.yml/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions/workflows/build.yml)
 [![Test](https://github.com/mehrantsi/hyperlimit/actions/workflows/test.yml/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions/workflows/test.yml)
 [![CodeQL](https://github.com/mehrantsi/hyperlimit/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/mehrantsi/hyperlimit/actions/workflows/github-code-scanning/codeql)
-[![CodeFactor](https://www.codefactor.io/repository/github/mehrantsi/hyperlimit/badge/main)](https://www.codefactor.io/repository/github/mehrantsi/hyperlimit/overview/main)
 
 High-performance native rate limiter for Node.js with lock-free design, optimized for high-throughput applications. Capable of processing over 9 million requests per second in synthetic benchmarks.
 
