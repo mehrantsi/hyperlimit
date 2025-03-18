@@ -9,7 +9,6 @@ High-performance native rate limiter for Node.js with lock-free design, optimize
 
 ## Features
 
-- 🚀 Native C++ implementation for maximum performance
 - 🔒 Lock-free design for high concurrency
 - 🎯 Per-key rate limiting with configurable windows
 - 💾 Memory-efficient implementation
