@@ -102,11 +102,33 @@ jobs:
             VERSION=${GITHUB_REF#refs/tags/v}
           fi
           
-          # Update version in all package.json files
-          npm version $VERSION --no-git-tag-version
-          cd packages/express && npm version $VERSION --no-git-tag-version && cd ../..
-          cd packages/fastify && npm version $VERSION --no-git-tag-version && cd ../..
-          cd packages/hyperexpress && npm version $VERSION --no-git-tag-version && cd ../..
+          # Check if packages directory exists
+          if [ -d "packages" ]; then
+            # Update version in all package.json files if directories exist
+            npm version $VERSION --no-git-tag-version
+            
+            if [ -d "packages/express" ]; then
+              cd packages/express && npm version $VERSION --no-git-tag-version && cd ../..
+            else
+              echo "Warning: packages/express directory not found"
+            fi
+            
+            if [ -d "packages/fastify" ]; then
+              cd packages/fastify && npm version $VERSION --no-git-tag-version && cd ../..
+            else
+              echo "Warning: packages/fastify directory not found"
+            fi
+            
+            if [ -d "packages/hyperexpress" ]; then
+              cd packages/hyperexpress && npm version $VERSION --no-git-tag-version && cd ../..
+            else
+              echo "Warning: packages/hyperexpress directory not found"
+            fi
+          else
+            # Just update the main package
+            npm version $VERSION --no-git-tag-version
+            echo "Warning: packages directory not found"
+          fi
           
           echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
 
@@ -131,17 +153,28 @@ jobs:
           # Install system dependencies for building
           sudo apt-get update
           sudo apt-get install -y libhiredis-dev build-essential cmake
-
-          # Create and publish core package first
+          
+          # Verify hiredis is installed correctly
+          ls -la /usr/include/hiredis/ || echo "hiredis directory not found"
+          
+          # Create core package directory
           mkdir -p dist/hyperlimit
           cp -r prebuilds package.json README.md LICENSE index.js binding.gyp src dist/hyperlimit/
+          
+          # Install dependencies and build the core package
           cd dist/hyperlimit
+          
+          # Install hiredis in the core package directory
+          sudo apt-get install -y libhiredis-dev
+          
           node -e "
             const pkg = require('./package.json');
             pkg.name = '@hyperlimit/core';
             pkg.version = '${RELEASE_VERSION}';
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+          
+          # Install dependencies and build
           npm install
           npm run build
           npm pack
@@ -164,55 +197,67 @@ jobs:
           done
 
           # Create and publish Express middleware package
-          mkdir -p dist/hyperlimit-express
-          cp -r packages/express/index.js packages/express/package.json README.md LICENSE dist/hyperlimit-express/
-          cd dist/hyperlimit-express
-          node -e "
-            const pkg = require('./package.json');
-            pkg.version = '${RELEASE_VERSION}';
-            pkg.dependencies = {
-              '@hyperlimit/core': '${RELEASE_VERSION}'
-            };
-            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          "
-          npm install --registry=https://registry.npmjs.org/
-          npm pack
-          npm publish --access public
-          cd ../..
+          if [ -d "packages/express" ]; then
+            mkdir -p dist/hyperlimit-express
+            cp -r packages/express/index.js packages/express/package.json README.md LICENSE dist/hyperlimit-express/
+            cd dist/hyperlimit-express
+            node -e "
+              const pkg = require('./package.json');
+              pkg.version = '${RELEASE_VERSION}';
+              pkg.dependencies = {
+                '@hyperlimit/core': '${RELEASE_VERSION}'
+              };
+              require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+            "
+            npm install --registry=https://registry.npmjs.org/
+            npm pack
+            npm publish --access public
+            cd ../..
+          else
+            echo "Skipping express package: directory not found"
+          fi
 
           # Create and publish Fastify middleware package
-          mkdir -p dist/hyperlimit-fastify
-          cp -r packages/fastify/index.js packages/fastify/package.json README.md LICENSE dist/hyperlimit-fastify/
-          cd dist/hyperlimit-fastify
-          node -e "
-            const pkg = require('./package.json');
-            pkg.version = '${RELEASE_VERSION}';
-            pkg.dependencies = {
-              '@hyperlimit/core': '${RELEASE_VERSION}'
-            };
-            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          "
-          npm install --registry=https://registry.npmjs.org/
-          npm pack
-          npm publish --access public
-          cd ../..
+          if [ -d "packages/fastify" ]; then
+            mkdir -p dist/hyperlimit-fastify
+            cp -r packages/fastify/index.js packages/fastify/package.json README.md LICENSE dist/hyperlimit-fastify/
+            cd dist/hyperlimit-fastify
+            node -e "
+              const pkg = require('./package.json');
+              pkg.version = '${RELEASE_VERSION}';
+              pkg.dependencies = {
+                '@hyperlimit/core': '${RELEASE_VERSION}'
+              };
+              require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+            "
+            npm install --registry=https://registry.npmjs.org/
+            npm pack
+            npm publish --access public
+            cd ../..
+          else
+            echo "Skipping fastify package: directory not found"
+          fi
 
           # Create and publish HyperExpress middleware package
-          mkdir -p dist/hyperlimit-hyperexpress
-          cp -r packages/hyperexpress/index.js packages/hyperexpress/package.json README.md LICENSE dist/hyperlimit-hyperexpress/
-          cd dist/hyperlimit-hyperexpress
-          node -e "
-            const pkg = require('./package.json');
-            pkg.version = '${RELEASE_VERSION}';
-            pkg.dependencies = {
-              '@hyperlimit/core': '${RELEASE_VERSION}'
-            };
-            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          "
-          npm install --registry=https://registry.npmjs.org/
-          npm pack
-          npm publish --access public
-          cd ../..
+          if [ -d "packages/hyperexpress" ]; then
+            mkdir -p dist/hyperlimit-hyperexpress
+            cp -r packages/hyperexpress/index.js packages/hyperexpress/package.json README.md LICENSE dist/hyperlimit-hyperexpress/
+            cd dist/hyperlimit-hyperexpress
+            node -e "
+              const pkg = require('./package.json');
+              pkg.version = '${RELEASE_VERSION}';
+              pkg.dependencies = {
+                '@hyperlimit/core': '${RELEASE_VERSION}'
+              };
+              require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+            "
+            npm install --registry=https://registry.npmjs.org/
+            npm pack
+            npm publish --access public
+            cd ../..
+          else
+            echo "Skipping hyperexpress package: directory not found"
+          fi
 
       - name: Create GitHub Release
         env:
@@ -232,9 +277,20 @@ jobs:
           echo "" >> release_notes.md
           echo "## Packages" >> release_notes.md
           echo "- @hyperlimit/core@${VERSION}" >> release_notes.md
-          echo "- @hyperlimit/express@${VERSION}" >> release_notes.md
-          echo "- @hyperlimit/fastify@${VERSION}" >> release_notes.md
-          echo "- @hyperlimit/hyperexpress@${VERSION}" >> release_notes.md
+          
+          # Add package notes only if they exist
+          if [ -d "packages/express" ] || [ -f "dist/hyperlimit-express/hyperlimit-express-${VERSION}.tgz" ]; then
+            echo "- @hyperlimit/express@${VERSION}" >> release_notes.md
+          fi
+          
+          if [ -d "packages/fastify" ] || [ -f "dist/hyperlimit-fastify/hyperlimit-fastify-${VERSION}.tgz" ]; then
+            echo "- @hyperlimit/fastify@${VERSION}" >> release_notes.md
+          fi
+          
+          if [ -d "packages/hyperexpress" ] || [ -f "dist/hyperlimit-hyperexpress/hyperlimit-hyperexpress-${VERSION}.tgz" ]; then
+            echo "- @hyperlimit/hyperexpress@${VERSION}" >> release_notes.md
+          fi
+          
           echo "" >> release_notes.md
           echo "## Changes" >> release_notes.md
           echo "- See commit history for detailed changes" >> release_notes.md
@@ -243,13 +299,26 @@ jobs:
           echo "Contents of dist directory:"
           ls -R dist/
           
+          # Prepare files to upload
+          FILES_TO_UPLOAD="dist/hyperlimit/hyperlimit-core-${VERSION}.tgz"
+          
+          # Add additional package files only if they exist
+          if [ -f "dist/hyperlimit-express/hyperlimit-express-${VERSION}.tgz" ]; then
+            FILES_TO_UPLOAD="$FILES_TO_UPLOAD dist/hyperlimit-express/hyperlimit-express-${VERSION}.tgz"
+          fi
+          
+          if [ -f "dist/hyperlimit-fastify/hyperlimit-fastify-${VERSION}.tgz" ]; then
+            FILES_TO_UPLOAD="$FILES_TO_UPLOAD dist/hyperlimit-fastify/hyperlimit-fastify-${VERSION}.tgz"
+          fi
+          
+          if [ -f "dist/hyperlimit-hyperexpress/hyperlimit-hyperexpress-${VERSION}.tgz" ]; then
+            FILES_TO_UPLOAD="$FILES_TO_UPLOAD dist/hyperlimit-hyperexpress/hyperlimit-hyperexpress-${VERSION}.tgz"
+          fi
+          
           # Create GitHub Release
           gh release create "v${VERSION}" \
             --title "HyperLimit v${VERSION}" \
             --notes-file release_notes.md \
             --draft=false \
             --target $GITHUB_SHA \
-            "dist/hyperlimit/hyperlimit-core-${VERSION}.tgz" \
-            "dist/hyperlimit-express/hyperlimit-express-${VERSION}.tgz" \
-            "dist/hyperlimit-fastify/hyperlimit-fastify-${VERSION}.tgz" \
-            "dist/hyperlimit-hyperexpress/hyperlimit-hyperexpress-${VERSION}.tgz" 
+            $FILES_TO_UPLOAD 
