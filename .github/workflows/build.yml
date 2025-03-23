@@ -90,6 +90,11 @@ jobs:
           scope: '@hyperlimit'
           always-auth: true
 
+      - name: Install system dependencies for building
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libhiredis-dev build-essential cmake
+
       - name: Set version
         shell: bash
         run: |
@@ -128,10 +133,6 @@ jobs:
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
           echo "registry=https://registry.npmjs.org/" >> .npmrc
 
-          # Install system dependencies for building
-          sudo apt-get update
-          sudo apt-get install -y libhiredis-dev build-essential cmake
-
           # Create and publish core package first
           mkdir -p dist/hyperlimit
           cp -r prebuilds package.json README.md LICENSE index.js binding.gyp src dist/hyperlimit/
@@ -142,9 +143,6 @@ jobs:
             pkg.version = '${RELEASE_VERSION}';
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
-          # Set include paths and lib paths explicitly for hiredis
-          export CPATH=/usr/include
-          export LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
           npm install
           npm run build
           npm pack
