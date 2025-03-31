@@ -9,19 +9,19 @@ High-performance native rate limiter for Node.js with lock-free design, optimize
 
 ## Features
 
-- 🔒 Lock-free design for high concurrency
-- 🎯 Per-key rate limiting with configurable windows
-- 💾 Memory-efficient implementation
-- 🛡️ Thread-safe operations
-- 🔄 Sliding window support
-- 🎭 Multiple independent rate limiters
-- 📊 Real-time monitoring and statistics
-- 🌐 Redis-based distributed rate limiting
-- 🎛️ Dynamic rate limiting per tenant/API key
-- ⚡ Bypass keys for trusted clients
-- 🎯 Penalty system for abuse prevention
-- 📈 Customizable key generation
-- 🔌 Framework-specific middleware packages
+- Lock-free design for high concurrency
+- Per-key rate limiting with configurable windows
+- Memory-efficient implementation
+- Thread-safe operations
+- Sliding window support
+- Multiple independent rate limiters
+- Real-time monitoring and statistics
+- Redis-based distributed rate limiting
+- Dynamic rate limiting per tenant/API key
+- Bypass keys for trusted clients
+- Penalty system for abuse prevention
+- Customizable key generation
+- Framework-specific middleware packages
 
 ## Installation
 
