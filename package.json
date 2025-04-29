@@ -60,7 +60,7 @@
     "node-gyp": "^10.0.1",
     "prebuildify": "^5.0.1",
     "rate-limiter-flexible": "^5.0.4",
-    "supertest": "^6.3.4",
+    "supertest": "^7.1.0",
     "typescript": "^5.3.3"
   },
   "engines": {
