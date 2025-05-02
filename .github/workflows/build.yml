@@ -144,7 +144,6 @@ jobs:
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
           npm install
-          npm run build
           npm pack
           npm publish --access public
           cd ../..
