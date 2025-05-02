@@ -143,6 +143,12 @@ jobs:
             pkg.version = '${RELEASE_VERSION}';
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+          # Clear scripts to prevent re-running build during pack/publish
+          node -e "
+            const pkg = require('./package.json');
+            pkg.scripts = {}; // Clear the scripts section
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
           npm install
           npm pack
           npm publish --access public
