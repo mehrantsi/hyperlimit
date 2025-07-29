@@ -19,9 +19,28 @@ interface MonitoringStats {
     penaltyRate: number;
 }
 
+interface RedisOptions {
+    host?: string;
+    port?: number;
+    prefix?: string;
+}
+
+interface NatsOptions {
+    servers?: string | string[];
+    bucket?: string;
+    prefix?: string;
+    credentials?: string;
+}
+
+interface HyperLimitOptions {
+    bucketCount?: number;
+    redis?: RedisOptions;
+    nats?: NatsOptions;
+}
+
 interface HyperLimitNative {
     HyperLimit: {
-        new(bucketCount?: number, storage?: DistributedStorage): {
+        new(options?: HyperLimitOptions): {
             createLimiter(key: string, maxTokens: number, refillTimeMs: number, useSlidingWindow?: boolean, blockDurationMs?: number, maxPenaltyPoints?: number, distributedKey?: string): void;
             tryRequest(key: string, ip?: string): boolean;
             removeLimiter(key: string): void;
@@ -58,4 +77,4 @@ try {
 
 // Export the native module and DistributedStorage
 export const HyperLimit = nativeModule.HyperLimit;
-export type { RateLimitInfo, MonitoringStats }; 
+export type { RateLimitInfo, MonitoringStats, HyperLimitOptions, RedisOptions, NatsOptions }; 

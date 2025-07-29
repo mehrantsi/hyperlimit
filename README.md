@@ -16,7 +16,7 @@ High-performance native rate limiter for Node.js with lock-free design, optimize
 - Sliding window support
 - Multiple independent rate limiters
 - Real-time monitoring and statistics
-- Redis-based distributed rate limiting
+- Distributed rate limiting (Redis or NATS)
 - Dynamic rate limiting per tenant/API key
 - Bypass keys for trusted clients
 - Penalty system for abuse prevention
@@ -94,6 +94,20 @@ app.get('/api/custom', rateLimiter({
 }), (req, res) => {
     res.json({ message: 'Custom API response' });
 });
+
+// Distributed rate limiting with NATS
+app.get('/api/distributed', rateLimiter({
+    key: 'distributed',
+    maxTokens: 100,
+    window: '1m',
+    nats: {
+        servers: 'nats://localhost:4222',
+        bucket: 'rate-limits',
+        prefix: 'rl_'
+    }
+}), (req, res) => {
+    res.json({ message: 'Distributed API response' });
+});
 ```
 
 ### Fastify
@@ -153,6 +167,23 @@ fastify.get('/api/custom', {
         return { message: 'Custom API response' };
     }
 });
+
+// Distributed rate limiting with NATS
+fastify.get('/api/distributed', {
+    preHandler: rateLimiter({
+        key: 'distributed',
+        maxTokens: 100,
+        window: '1m',
+        nats: {
+            servers: 'nats://localhost:4222',
+            bucket: 'rate-limits',
+            prefix: 'rl_'
+        }
+    }),
+    handler: async (request, reply) => {
+        return { message: 'Distributed API response' };
+    }
+});
 ```
 
 ### HyperExpress
@@ -205,6 +236,20 @@ app.get('/api/custom', rateLimiter({
     bypassKeys: ['special-key']
 }), (req, res) => {
     res.json({ message: 'Custom API response' });
+});
+
+// Distributed rate limiting with NATS
+app.get('/api/distributed', rateLimiter({
+    key: 'distributed',
+    maxTokens: 100,
+    window: '1m',
+    nats: {
+        servers: 'nats://localhost:4222',
+        bucket: 'rate-limits',
+        prefix: 'rl_'
+    }
+}), (req, res) => {
+    res.json({ message: 'Distributed API response' });
 });
 ```
 
@@ -511,6 +556,54 @@ Redis configuration options:
 }
 ```
 
+### 6. NATS Integration (Alternative to Redis)
+
+HyperLimit also supports NATS as a distributed storage backend, offering:
+- Lightweight, high-performance messaging
+- Built-in persistence with JetStream
+- Native support for distributed architectures
+- Lower operational overhead than Redis
+- Built-in security features (TLS, authentication)
+
+NATS configuration:
+```javascript
+const limiter = new HyperLimit({
+    bucketCount: 16384,
+    nats: {
+        servers: 'nats://localhost:4222',  // Single server or array
+        bucket: 'rate-limits',              // KV bucket name
+        prefix: 'rl_',                      // Key prefix
+        credentials: './nats.creds'         // Optional auth file
+    }
+});
+```
+
+NATS configuration options:
+```javascript
+{
+    servers: string | string[],  // NATS server(s)
+    bucket: string,              // KV bucket name for rate limit data
+    prefix: string,              // Key prefix (default: 'rl_')
+    credentials?: string         // Path to NATS credentials file
+}
+```
+
+Example with NATS cluster:
+```javascript
+const limiter = new HyperLimit({
+    bucketCount: 16384,
+    nats: {
+        servers: [
+            'nats://nats1.example.com:4222',
+            'nats://nats2.example.com:4222',
+            'nats://nats3.example.com:4222'
+        ],
+        bucket: 'rate-limits',
+        prefix: 'rl_'
+    }
+});
+```
+
 ## Configuration Options
 
 ```typescript
@@ -529,6 +622,7 @@ interface RateLimiterOptions {
     
     // Distributed Options
     redis?: Redis;           // Redis client for distributed mode
+    nats?: NatsOptions;      // NATS configuration for distributed mode
     
     // Response Handling
     onRejected?: (req, res, info) => void;  // Custom rejection handler
@@ -634,6 +728,20 @@ Check out the [examples](./examples) directory for:
    - Regularly check rate limit status
    - Monitor bypass key usage
    - Track penalty patterns
+
+## Prerequisites for Distributed Rate Limiting
+
+### Redis (Option 1)
+- Redis server (any version supporting Lua scripts)
+- Install: `docker run -p 6379:6379 redis:latest`
+
+### NATS (Option 2)
+- NATS server with JetStream enabled
+- Install: `docker run -p 4222:4222 nats:latest -js`
+- C client library (libnats):
+  - macOS: `brew install cnats`
+  - Ubuntu/Debian: `apt-get install libnats-dev`
+  - Windows: Use vcpkg `vcpkg install cnats`
 
 ## Building from Source
 

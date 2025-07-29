@@ -4,31 +4,30 @@ async function example() {
     const TOTAL_LIMIT = 100; // Total allowed requests across all servers
     const WINDOW_MS = 60000;  // 1 minute window
     
-    // Create two HyperLimit instances with Redis support (simulating two servers)
+    // Create two HyperLimit instances with NATS support (simulating two servers)
     const limiter1 = new HyperLimit({
         bucketCount: 16384,
-        redis: {
-            host: 'localhost',
-            port: 6379,
-            prefix: 'rl:'
+        nats: {
+            servers: 'nats://localhost:4222',
+            bucket: 'rate-limits',
+            prefix: 'rl_'
         }
     });
 
     const limiter2 = new HyperLimit({
         bucketCount: 16384,
-        redis: {
-            host: 'localhost',
-            port: 6379,
+        nats: {
+            servers: 'nats://localhost:4222',
+            bucket: 'rate-limits',
             prefix: 'rl_'
         }
     });
 
-    // Configure rate limiters with the total limit each locally,
-    // but share the same distributed key for global coordination
+    // Configure rate limiters with the same distributed key for global coordination
     limiter1.createLimiter('api:endpoint1', TOTAL_LIMIT, WINDOW_MS, true, 0, 0, 'api:endpoint1:global');
     limiter2.createLimiter('api:endpoint1', TOTAL_LIMIT, WINDOW_MS, true, 0, 0, 'api:endpoint1:global');
 
-    console.log('Simulating distributed rate limiting across servers...\n');
+    console.log('Simulating distributed rate limiting with NATS across servers...\n');
     console.log(`Total limit across all servers: ${TOTAL_LIMIT} requests\n`);
 
     // Server 1 makes 80 requests first
@@ -63,9 +62,14 @@ async function example() {
     console.log('- Server 1 (local):', limiter1Info.remaining);
     console.log('- Server 2 (local):', limiter2Info.remaining);
 
-    // Wait a bit to let Redis connections close gracefully
+    // Wait a bit to let NATS connections close gracefully
     await new Promise(resolve => setTimeout(resolve, 100));
 }
 
 // Run the example
-example().catch(console.error); 
+example().catch(err => {
+    console.error('Error:', err.message);
+    console.error('\nMake sure NATS server is running:');
+    console.error('  docker run -p 4222:4222 nats:latest');
+    process.exit(1);
+});

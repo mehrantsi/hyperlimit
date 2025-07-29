@@ -12,15 +12,19 @@ function rateLimit(options = {}) {
         bypassKeys = [],
         keyGenerator,
         onRejected,
-        redis
+        redis,
+        nats
     } = options;
 
     // Convert time strings to milliseconds
     const windowMs = parseDuration(window);
     const blockMs = block ? parseDuration(block) : 0;
 
-    // Create limiter instance with Redis support if configured
-    const limiter = new HyperLimit(redis ? { redis } : undefined);
+    // Create limiter instance with distributed storage if configured
+    const limiterOptions = {};
+    if (redis) limiterOptions.redis = redis;
+    if (nats) limiterOptions.nats = nats;
+    const limiter = new HyperLimit(Object.keys(limiterOptions).length > 0 ? limiterOptions : undefined);
 
     // Create limiter for this route
     limiter.createLimiter(key, maxTokens, windowMs, sliding, blockMs, maxPenalty);

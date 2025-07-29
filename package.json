@@ -23,11 +23,15 @@
     "test:express": "mocha test/express.test.js --timeout 5000",
     "test:fastify": "mocha test/fastify.test.js --timeout 5000",
     "test:hyperexpress": "mocha test/hyperexpress.test.js --timeout 5000",
+    "test:nats": "mocha test/nats.test.js --timeout 10000",
     "benchmark": "node examples/benchmark.js",
+    "benchmark:distributed": "node examples/benchmark-distributed.js",
     "example:express": "node examples/express.js",
     "example:fastify": "node examples/fastify.js",
     "example:hyperexpress": "node examples/hyperexpress.js",
-    "example:distributed": "node examples/distributed.js"
+    "example:distributed": "node examples/distributed.js",
+    "example:nats": "node examples/nats-distributed.js",
+    "example:nats-cluster": "node examples/nats-cluster.js"
   },
   "keywords": [
     "rate-limiter",
