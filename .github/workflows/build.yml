@@ -35,17 +35,17 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libhiredis-dev build-essential cmake
+          sudo apt-get install -y libhiredis-dev libnats-dev build-essential cmake
 
       - name: Install system dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install hiredis
+          brew install hiredis cnats
 
       - name: Install system dependencies (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          vcpkg install hiredis:x64-windows
+          vcpkg install hiredis:x64-windows cnats:x64-windows
           echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
           choco install cmake -y
 
@@ -93,7 +93,7 @@ jobs:
       - name: Install system dependencies for building
         run: |
           sudo apt-get update
-          sudo apt-get install -y libhiredis-dev build-essential cmake
+          sudo apt-get install -y libhiredis-dev libnats-dev build-essential cmake
 
       - name: Set version
         shell: bash

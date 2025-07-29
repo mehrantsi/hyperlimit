@@ -28,20 +28,48 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libhiredis-dev build-essential cmake
+        sudo apt-get install -y libhiredis-dev libnats-dev build-essential cmake
 
     - name: Install system dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install hiredis
+        brew install hiredis cnats
 
     - name: Install system dependencies (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        vcpkg install hiredis:x64-windows
+        vcpkg install hiredis:x64-windows cnats:x64-windows
         echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
         choco install cmake -y
         npm install -g node-gyp
+
+    - name: Start NATS server (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        docker run -d --name nats-server -p 4222:4222 nats:latest -js
+        # Wait for NATS to be ready
+        sleep 5
+        docker logs nats-server
+    
+    - name: Start NATS server (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        # Download and run NATS server directly
+        curl -L https://github.com/nats-io/nats-server/releases/download/v2.10.7/nats-server-v2.10.7-darwin-amd64.zip -o nats-server.zip
+        unzip nats-server.zip
+        ./nats-server-v2.10.7-darwin-amd64/nats-server -js &
+        # Wait for NATS to be ready
+        sleep 5
+    
+    - name: Start NATS server (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        # Download and run NATS server directly
+        Invoke-WebRequest https://github.com/nats-io/nats-server/releases/download/v2.10.7/nats-server-v2.10.7-windows-amd64.zip -OutFile nats-server.zip
+        Expand-Archive -Path nats-server.zip -DestinationPath .
+        Start-Process -FilePath ".\nats-server-v2.10.7-windows-amd64\nats-server.exe" -ArgumentList "-js"
+        # Wait for NATS to be ready
+        Start-Sleep -Seconds 5
 
     - name: Install dependencies
       run: npm ci
@@ -84,3 +112,19 @@ jobs:
       env:
         VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
         npm_config_build_from_source: true
+    
+    - name: Stop NATS server (Ubuntu)
+      if: always() && matrix.os == 'ubuntu-latest'
+      run: |
+        docker stop nats-server || true
+        docker rm nats-server || true
+    
+    - name: Stop NATS server (macOS)
+      if: always() && matrix.os == 'macos-latest'
+      run: |
+        pkill nats-server || true
+    
+    - name: Stop NATS server (Windows)
+      if: always() && matrix.os == 'windows-latest'
+      run: |
+        Stop-Process -Name "nats-server" -Force -ErrorAction SilentlyContinue
