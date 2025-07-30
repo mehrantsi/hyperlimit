@@ -19,7 +19,7 @@ async function example() {
         redis: {
             host: 'localhost',
             port: 6379,
-            prefix: 'rl_'
+            prefix: 'rl:'
         }
     });
 
