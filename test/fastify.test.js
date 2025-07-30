@@ -167,5 +167,56 @@ describe('Fastify Plugin', () => {
             assert(res.headers['x-ratelimit-remaining']);
             assert(res.headers['x-ratelimit-reset']);
         });
+
+        it('should work with NATS distributed storage', async function() {
+            // Create a new Fastify instance for this test to avoid route conflicts
+            let natsApp;
+            try {
+                natsApp = fastify();
+                natsApp.get('/nats-test', {
+                    preHandler: rateLimit({
+                        key: 'nats-test',
+                        maxTokens: 2,
+                        window: '10s',
+                        nats: {
+                            servers: 'nats://localhost:4222',
+                            bucket: 'test-fastify',
+                            prefix: 'fast_'
+                        }
+                    }),
+                    handler: async (request, reply) => {
+                        return { message: 'nats success' };
+                    }
+                });
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping NATS middleware test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+
+            // Test that NATS rate limiting works
+            const res1 = await natsApp.inject({
+                method: 'GET',
+                url: '/nats-test'
+            });
+            assert.strictEqual(res1.statusCode, 200);
+            assert.strictEqual(res1.json().message, 'nats success');
+
+            const res2 = await natsApp.inject({
+                method: 'GET',
+                url: '/nats-test'
+            });
+            assert.strictEqual(res2.statusCode, 200);
+
+            // Third request should be rate limited
+            const res3 = await natsApp.inject({
+                method: 'GET',
+                url: '/nats-test'
+            });
+            assert.strictEqual(res3.statusCode, 429);
+        });
     });
 }); 

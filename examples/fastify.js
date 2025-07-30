@@ -1,11 +1,17 @@
 const fastify = require('fastify')();
 const rateLimit = require('../src/middleware-fastify');
 
-// Optional Redis configuration - uncomment to enable distributed rate limiting
+// Optional distributed storage configuration - uncomment to enable distributed rate limiting
 // const redisConfig = {
 //     host: 'localhost',
 //     port: 6379,
 //     prefix: 'rl:'
+// };
+//
+// const natsConfig = {
+//     servers: 'nats://localhost:4222',
+//     bucket: 'rate-limits',
+//     prefix: 'rl_'
 // };
 
 // Example routes using direct configuration
@@ -31,7 +37,8 @@ fastify.get('/api/protected', {
         sliding: true,
         block: '5m',
         maxPenalty: 3,
-        // redis: redisConfig, // Uncomment to enable distributed rate limiting
+        // redis: redisConfig, // Uncomment to enable Redis distributed rate limiting
+        // nats: natsConfig,   // Or use NATS for distributed rate limiting
         onRejected: (request, reply, info) => {
             reply.code(429).send({
                 error: 'Rate limit exceeded',

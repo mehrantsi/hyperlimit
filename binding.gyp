@@ -38,9 +38,7 @@
           "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/include",
           "src/native"
         ],
-        "libraries": [
-          "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/lib/hiredis.lib"
-        ],
+        "libraries": [],
         "defines": [
           "NAPI_DISABLE_CPP_EXCEPTIONS",
           "NOMINMAX",
@@ -59,7 +57,7 @@
           "-L/usr/local/lib",
           "-L/usr/local/lib64",
           "-L/opt/homebrew/lib",
-          "-lhiredis"
+          "-ldl"
         ],
         "defines": [
           "NAPI_DISABLE_CPP_EXCEPTIONS"

@@ -4,11 +4,17 @@ const rateLimit = require('../src/middleware-hyperexpress');
 // Create HyperExpress app
 const app = new HyperExpress.Server();
 
-// Optional Redis configuration - uncomment to enable distributed rate limiting
+// Optional distributed storage configuration - uncomment to enable distributed rate limiting
 // const redisConfig = {
 //     host: 'localhost',
 //     port: 6379,
 //     prefix: 'rl:'
+// };
+//
+// const natsConfig = {
+//     servers: 'nats://localhost:4222',
+//     bucket: 'rate-limits',
+//     prefix: 'rl_'
 // };
 
 // Example routes using direct configuration
@@ -30,7 +36,8 @@ app.get('/api/protected', rateLimit({
     sliding: true,
     block: '5m',
     maxPenalty: 3,
-    // redis: redisConfig, // Uncomment to enable distributed rate limiting
+    // redis: redisConfig, // Uncomment to enable Redis distributed rate limiting
+    // nats: natsConfig,   // Or use NATS for distributed rate limiting
     onRejected: (req, res, info) => {
         res.status(429);
         res.json({

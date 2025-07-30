@@ -172,5 +172,79 @@ describe('HyperExpress Middleware', () => {
             assert(res.headers.get('x-ratelimit-remaining'));
             assert(res.headers.get('x-ratelimit-reset'));
         });
+
+        it('should work with NATS distributed storage', async function() {
+            // Create a new HyperExpress instance for this test to avoid route conflicts
+            let natsApp;
+            let natsServer;
+            let natsPort;
+            
+            try {
+                natsApp = new HyperExpress.Server();
+                natsApp.get('/nats-test', rateLimit({
+                    key: 'nats-test',
+                    maxTokens: 2,
+                    window: '10s',
+                    nats: {
+                        servers: 'nats://localhost:4222',
+                        bucket: 'test-hyperexpress',
+                        prefix: 'hyper_'
+                    }
+                }), (req, res) => {
+                    res.json({ message: 'nats success' });
+                });
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping NATS middleware test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+
+            // Find a free port for NATS test
+            natsPort = await new Promise((resolve) => {
+                const srv = require('http').createServer();
+                srv.listen(0, '127.0.0.1', () => {
+                    const port = srv.address().port;
+                    srv.close(() => resolve(port));
+                });
+            });
+
+            // Start NATS test server
+            await new Promise((resolve, reject) => {
+                try {
+                    natsApp.listen(natsPort, '127.0.0.1')
+                        .then(() => {
+                            natsServer = natsApp;
+                            setTimeout(resolve, 100);
+                        })
+                        .catch(reject);
+                } catch (err) {
+                    reject(err);
+                }
+            });
+
+            // Test that NATS rate limiting works
+            const res1 = await fetch(`http://127.0.0.1:${natsPort}/nats-test`);
+            assert.strictEqual(res1.status, 200);
+            const body1 = await res1.json();
+            assert.strictEqual(body1.message, 'nats success');
+
+            const res2 = await fetch(`http://127.0.0.1:${natsPort}/nats-test`);
+            assert.strictEqual(res2.status, 200);
+
+            // Third request should be rate limited
+            const res3 = await fetch(`http://127.0.0.1:${natsPort}/nats-test`);
+            assert.strictEqual(res3.status, 429);
+
+            // Clean up NATS test server
+            if (natsServer) {
+                await new Promise(resolve => {
+                    natsServer.close();
+                    setTimeout(resolve, 500);
+                });
+            }
+        });
     });
 }); 

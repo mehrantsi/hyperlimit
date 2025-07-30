@@ -136,5 +136,43 @@ describe('Express Middleware', () => {
             assert(res.headers['x-ratelimit-remaining']);
             assert(res.headers['x-ratelimit-reset']);
         });
+
+        it('should work with NATS distributed storage', async function() {
+            // Skip if NATS server not available
+            let natsLimiter;
+            try {
+                app.get('/nats-test', rateLimit({
+                    key: 'nats-test',
+                    maxTokens: 2,
+                    window: '10s',
+                    nats: {
+                        servers: 'nats://localhost:4222',
+                        bucket: 'test-express',
+                        prefix: 'exp_'
+                    }
+                }), (req, res) => {
+                    res.json({ message: 'nats success' });
+                });
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping NATS middleware test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+
+            // Test that NATS rate limiting works
+            const res1 = await request(app).get('/nats-test');
+            assert.strictEqual(res1.status, 200);
+            assert.strictEqual(res1.body.message, 'nats success');
+
+            const res2 = await request(app).get('/nats-test');
+            assert.strictEqual(res2.status, 200);
+
+            // Third request should be rate limited
+            const res3 = await request(app).get('/nats-test');
+            assert.strictEqual(res3.status, 429);
+        });
     });
 }); 

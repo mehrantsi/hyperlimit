@@ -1,6 +1,7 @@
 #include <napi.h>
 #include "ratelimiter.hpp"
 #include "redis_storage.hpp"
+#include "nats_storage.hpp"
 
 class HyperLimit : public Napi::ObjectWrap<HyperLimit> {
 public:
@@ -74,6 +75,47 @@ public:
                     storage = std::make_unique<RedisStorage>(host, port, prefix);
                 } catch (const std::exception& e) {
                     Napi::Error::New(env, std::string("Redis connection failed: ") + e.what())
+                        .ThrowAsJavaScriptException();
+                    return;
+                }
+            }
+
+            // Check for NATS options
+            if (options.Has("nats") && options.Get("nats").IsObject()) {
+                Napi::Object natsOpts = options.Get("nats").As<Napi::Object>();
+                std::string servers = "nats://localhost:4222";
+                std::string bucket = "rate-limits";
+                std::string prefix = "rl_";
+                std::string* credentials = nullptr;
+                std::string creds;
+
+                if (natsOpts.Has("servers")) {
+                    if (natsOpts.Get("servers").IsString()) {
+                        servers = natsOpts.Get("servers").As<Napi::String>().Utf8Value();
+                    } else if (natsOpts.Get("servers").IsArray()) {
+                        Napi::Array serversArray = natsOpts.Get("servers").As<Napi::Array>();
+                        servers = "";
+                        for (uint32_t i = 0; i < serversArray.Length(); i++) {
+                            if (i > 0) servers += ",";
+                            servers += serversArray.Get(i).As<Napi::String>().Utf8Value();
+                        }
+                    }
+                }
+                if (natsOpts.Has("bucket") && natsOpts.Get("bucket").IsString()) {
+                    bucket = natsOpts.Get("bucket").As<Napi::String>().Utf8Value();
+                }
+                if (natsOpts.Has("prefix") && natsOpts.Get("prefix").IsString()) {
+                    prefix = natsOpts.Get("prefix").As<Napi::String>().Utf8Value();
+                }
+                if (natsOpts.Has("credentials") && natsOpts.Get("credentials").IsString()) {
+                    creds = natsOpts.Get("credentials").As<Napi::String>().Utf8Value();
+                    credentials = &creds;
+                }
+
+                try {
+                    storage = std::make_unique<NatsStorage>(servers, bucket, prefix, credentials);
+                } catch (const std::exception& e) {
+                    Napi::Error::New(env, std::string("NATS connection failed: ") + e.what())
                         .ThrowAsJavaScriptException();
                     return;
                 }
