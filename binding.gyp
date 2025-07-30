@@ -39,8 +39,7 @@
           "src/native"
         ],
         "libraries": [
-          "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/lib/hiredis.lib",
-          "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/lib/nats.lib"
+          "<!@(echo %VCPKG_ROOT%)/installed/x64-windows/lib/hiredis.lib"
         ],
         "defines": [
           "NAPI_DISABLE_CPP_EXCEPTIONS",
@@ -61,7 +60,7 @@
           "-L/usr/local/lib64",
           "-L/opt/homebrew/lib",
           "-lhiredis",
-          "-lnats"
+          "-ldl"
         ],
         "defines": [
           "NAPI_DISABLE_CPP_EXCEPTIONS"
