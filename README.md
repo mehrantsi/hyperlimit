@@ -566,9 +566,16 @@ HyperLimit also supports NATS as a distributed storage backend, offering:
 - Built-in security features (TLS, authentication)
 
 **Prerequisites:**
-- NATS server with JetStream enabled
-- Quick start: `docker run -p 4222:4222 nats:latest -js`
-- The `-js` flag is required to enable JetStream for KV storage
+1. **NATS server with JetStream enabled**
+   - Quick start: `docker run -p 4222:4222 nats:latest -js`
+   - The `-js` flag is required to enable JetStream for KV storage
+
+2. **NATS C client library (cnats) - REQUIRED**
+   - macOS: `brew install cnats`
+   - Ubuntu/Debian: `apt-get install libnats-dev`
+   - Windows: `vcpkg install cnats`
+   
+   **Important**: The cnats library must be installed on your system for NATS integration to work. HyperLimit uses dynamic library loading to interface with NATS.
 
 NATS configuration:
 ```javascript
@@ -743,10 +750,46 @@ Check out the [examples](./examples) directory for:
 ### NATS (Option 2)
 - NATS server with JetStream enabled
 - Install: `docker run -p 4222:4222 nats:latest -js`
-- C client library (libnats):
+- C client library (libnats) - **REQUIRED**:
   - macOS: `brew install cnats`
   - Ubuntu/Debian: `apt-get install libnats-dev`
   - Windows: Use vcpkg `vcpkg install cnats`
+
+## Troubleshooting
+
+### NATS Integration Issues
+
+#### "NATS connection failed" Error
+1. **Verify cnats is installed**: Run `brew list cnats` (macOS) or `dpkg -l libnats-dev` (Ubuntu)
+2. **Check NATS server is running**: `nats server check`
+3. **Ensure JetStream is enabled**: The server must be started with `-js` flag
+
+#### "Failed to create/bind to KV store" Error
+This generic error can occur for several reasons:
+
+1. **JetStream permissions**: Your NATS user may lack permissions to create buckets. Try:
+   - Creating the bucket manually: `nats kv add rate-limits --ttl=1h`
+   - Or ensure your user has JetStream admin permissions
+
+2. **JetStream initialization**: After starting NATS, wait a few seconds before connecting
+
+3. **Bucket conflicts**: Delete and recreate the bucket:
+   ```bash
+   nats kv rm rate-limits -f
+   nats kv add rate-limits --ttl=1h
+   ```
+
+4. **Connection issues**: Test with NATS CLI:
+   ```bash
+   nats kv put rate-limits test "value"
+   nats kv get rate-limits test
+   ```
+
+#### Dynamic Library Loading Issues
+If HyperLimit can't find the cnats library:
+- **macOS**: Ensure `/usr/local/lib` or `/opt/homebrew/lib` is in your library path
+- **Linux**: Run `sudo ldconfig` after installing libnats-dev
+- **Windows**: Ensure nats.dll is in your PATH
 
 ## Building from Source
 

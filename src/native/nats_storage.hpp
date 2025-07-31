@@ -104,12 +104,21 @@ public:
         
         s = g_natsLoader.js_CreateKeyValue(&kv, js, &kvConf);
         if (s != NATS_OK && s != NATS_UPDATE_ERR_STACK) {
+            // Store the creation error for better diagnostics
+            std::string createError = g_natsLoader.natsStatus_GetText(s);
+            
             // Try to bind to existing bucket
             s = g_natsLoader.js_KeyValue(&kv, js, bucket.c_str());
             if (s != NATS_OK) {
+                std::string bindError = g_natsLoader.natsStatus_GetText(s);
                 g_natsLoader.jsCtx_Destroy(js);
                 g_natsLoader.natsConnection_Destroy(nc);
-                throw std::runtime_error("Failed to create/bind to KV store");
+                throw std::runtime_error(
+                    "Failed to create/bind to KV store '" + bucket + "'. "
+                    "Create error: " + createError + ". "
+                    "Bind error: " + bindError + ". "
+                    "Try creating the bucket manually: nats kv add " + bucket + " --ttl=1h"
+                );
             }
         }
     }
