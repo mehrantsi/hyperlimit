@@ -565,6 +565,11 @@ HyperLimit also supports NATS as a distributed storage backend, offering:
 - Lower operational overhead than Redis
 - Built-in security features (TLS, authentication)
 
+**Prerequisites:**
+- NATS server with JetStream enabled
+- Quick start: `docker run -p 4222:4222 nats:latest -js`
+- The `-js` flag is required to enable JetStream for KV storage
+
 NATS configuration:
 ```javascript
 const limiter = new HyperLimit({
