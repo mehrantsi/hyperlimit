@@ -175,4 +175,109 @@ describe('Express Middleware', () => {
             assert.strictEqual(res3.status, 429);
         });
     });
+
+    describe('configResolver', () => {
+        it('should support dynamic rate limit configuration', async () => {
+            const app = express();
+            
+            // Track which configs were used
+            const usedConfigs = new Set();
+            
+            app.get('/dynamic', rateLimit({
+                keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+                configResolver: (apiKey) => {
+                    usedConfigs.add(apiKey);
+                    
+                    if (apiKey === 'premium') {
+                        return {
+                            maxTokens: 10,
+                            window: '1s'
+                        };
+                    } else if (apiKey === 'basic') {
+                        return {
+                            maxTokens: 2,
+                            window: '1s'
+                        };
+                    }
+                    return {
+                        maxTokens: 0,
+                        window: '1s'
+                    };
+                }
+            }), (req, res) => {
+                res.json({ message: 'success' });
+            });
+            
+            // Test premium user (10 requests allowed)
+            for (let i = 0; i < 10; i++) {
+                const res = await request(app)
+                    .get('/dynamic')
+                    .set('x-api-key', 'premium');
+                assert.strictEqual(res.status, 200);
+            }
+            
+            // 11th request should be rate limited
+            const res11 = await request(app)
+                .get('/dynamic')
+                .set('x-api-key', 'premium');
+            assert.strictEqual(res11.status, 429);
+            
+            // Test basic user (2 requests allowed)
+            const basicRes1 = await request(app)
+                .get('/dynamic')
+                .set('x-api-key', 'basic');
+            assert.strictEqual(basicRes1.status, 200);
+            
+            const basicRes2 = await request(app)
+                .get('/dynamic')
+                .set('x-api-key', 'basic');
+            assert.strictEqual(basicRes2.status, 200);
+            
+            // 3rd request should be rate limited
+            const basicRes3 = await request(app)
+                .get('/dynamic')
+                .set('x-api-key', 'basic');
+            assert.strictEqual(basicRes3.status, 429);
+            
+            // Test unknown user (no requests allowed)
+            const unknownRes = await request(app)
+                .get('/dynamic')
+                .set('x-api-key', 'unknown');
+            assert.strictEqual(unknownRes.status, 429);
+            
+            // Verify configs were called
+            assert(usedConfigs.has('premium'));
+            assert(usedConfigs.has('basic'));
+            assert(usedConfigs.has('unknown'));
+        });
+        
+        it('should cache config results efficiently', async () => {
+            const app = express();
+            let configResolverCalls = 0;
+            
+            app.get('/cached', rateLimit({
+                keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+                configResolver: (apiKey) => {
+                    configResolverCalls++;
+                    return {
+                        maxTokens: 5,
+                        window: '1s'
+                    };
+                }
+            }), (req, res) => {
+                res.json({ message: 'success' });
+            });
+            
+            // Make multiple requests with same API key
+            for (let i = 0; i < 3; i++) {
+                const res = await request(app)
+                    .get('/cached')
+                    .set('x-api-key', 'test-key');
+                assert.strictEqual(res.status, 200);
+            }
+            
+            // Config resolver should be called only once due to caching
+            assert.strictEqual(configResolverCalls, 1);
+        });
+    });
 }); 

@@ -4,6 +4,7 @@
 #include <memory>
 #include <sstream>
 #include <algorithm>
+#include <iostream>
 #include "nats_loader.hpp"
 #include "ratelimiter.hpp"
 
@@ -82,9 +83,11 @@ public:
         }
 
         // Create JetStream context
-        jsOptions jsOpts = {0};  // Zero-initialize
-        if (g_natsLoader.jsOptions_Init) {
-            g_natsLoader.jsOptions_Init(&jsOpts);
+        jsOptions jsOpts;
+        s = g_natsLoader.jsOptions_Init(&jsOpts);
+        if (s != NATS_OK) {
+            g_natsLoader.natsConnection_Destroy(nc);
+            throw std::runtime_error("Failed to initialize jsOptions: " + std::string(g_natsLoader.natsStatus_GetText(s)));
         }
         
         s = g_natsLoader.natsConnection_JetStream(&js, nc, &jsOpts);
@@ -94,30 +97,31 @@ public:
         }
 
         // Create or bind to key-value store
-        kvConfig kvConf = {0};  // Zero-initialize
-        if (g_natsLoader.kvConfig_Init) {
-            g_natsLoader.kvConfig_Init(&kvConf);
+        kvConfig kvConf;
+        // Always initialize kvConfig properly
+        s = g_natsLoader.kvConfig_Init(&kvConf);
+        if (s != NATS_OK) {
+            g_natsLoader.jsCtx_Destroy(js);
+            g_natsLoader.natsConnection_Destroy(nc);
+            throw std::runtime_error("Failed to initialize kvConfig: " + std::string(g_natsLoader.natsStatus_GetText(s)));
         }
-        kvConf.bucket = const_cast<char*>(bucket.c_str());
+        
+        kvConf.bucket = bucket.c_str();
         kvConf.history = 1;
-        kvConf.ttl = 3600000;  // 1 hour TTL
+        kvConf.ttl = 3600000000000;  // 1 hour TTL in nanoseconds (3600 * 1e9)
         
         s = g_natsLoader.js_CreateKeyValue(&kv, js, &kvConf);
-        if (s != NATS_OK && s != NATS_UPDATE_ERR_STACK) {
-            // Store the creation error for better diagnostics
-            std::string createError = g_natsLoader.natsStatus_GetText(s);
-            
-            // Try to bind to existing bucket
+        if (s != NATS_OK) {
+            // If creation failed, try to bind to existing bucket
+            // This is normal if the bucket already exists
             s = g_natsLoader.js_KeyValue(&kv, js, bucket.c_str());
             if (s != NATS_OK) {
-                std::string bindError = g_natsLoader.natsStatus_GetText(s);
+                // Both create and bind failed - this is a real error
+                std::string error = g_natsLoader.natsStatus_GetText(s);
                 g_natsLoader.jsCtx_Destroy(js);
                 g_natsLoader.natsConnection_Destroy(nc);
                 throw std::runtime_error(
-                    "Failed to create/bind to KV store '" + bucket + "'. "
-                    "Create error: " + createError + ". "
-                    "Bind error: " + bindError + ". "
-                    "Try creating the bucket manually: nats kv add " + bucket + " --ttl=1h"
+                    "Failed to create or bind to KV store '" + bucket + "'. Error: " + error
                 );
             }
         }

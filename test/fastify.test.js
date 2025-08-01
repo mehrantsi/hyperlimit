@@ -219,4 +219,131 @@ describe('Fastify Plugin', () => {
             assert.strictEqual(res3.statusCode, 429);
         });
     });
+
+    describe('configResolver', () => {
+        it('should support dynamic rate limit configuration', async () => {
+            const app = fastify();
+            
+            // Track which configs were used
+            const usedConfigs = new Set();
+            
+            await app.register(rateLimit, {
+                keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+                configResolver: (apiKey) => {
+                    usedConfigs.add(apiKey);
+                    
+                    if (apiKey === 'premium') {
+                        return {
+                            maxTokens: 10,
+                            window: '1s'
+                        };
+                    } else if (apiKey === 'basic') {
+                        return {
+                            maxTokens: 2,
+                            window: '1s'
+                        };
+                    }
+                    return {
+                        maxTokens: 0,
+                        window: '1s'
+                    };
+                }
+            });
+            
+            app.get('/dynamic', async (request, reply) => {
+                return { message: 'success' };
+            });
+            
+            await app.ready();
+            
+            // Test premium user (10 requests allowed)
+            for (let i = 0; i < 10; i++) {
+                const res = await app.inject({
+                    method: 'GET',
+                    url: '/dynamic',
+                    headers: { 'x-api-key': 'premium' }
+                });
+                assert.strictEqual(res.statusCode, 200);
+            }
+            
+            // 11th request should be rate limited
+            const res11 = await app.inject({
+                method: 'GET',
+                url: '/dynamic',
+                headers: { 'x-api-key': 'premium' }
+            });
+            assert.strictEqual(res11.statusCode, 429);
+            
+            // Test basic user (2 requests allowed)
+            const basicRes1 = await app.inject({
+                method: 'GET',
+                url: '/dynamic',
+                headers: { 'x-api-key': 'basic' }
+            });
+            assert.strictEqual(basicRes1.statusCode, 200);
+            
+            const basicRes2 = await app.inject({
+                method: 'GET',
+                url: '/dynamic',
+                headers: { 'x-api-key': 'basic' }
+            });
+            assert.strictEqual(basicRes2.statusCode, 200);
+            
+            // 3rd request should be rate limited
+            const basicRes3 = await app.inject({
+                method: 'GET',
+                url: '/dynamic',
+                headers: { 'x-api-key': 'basic' }
+            });
+            assert.strictEqual(basicRes3.statusCode, 429);
+            
+            // Test unknown user (no requests allowed)
+            const unknownRes = await app.inject({
+                method: 'GET',
+                url: '/dynamic',
+                headers: { 'x-api-key': 'unknown' }
+            });
+            assert.strictEqual(unknownRes.statusCode, 429);
+            
+            // Verify configs were called
+            assert(usedConfigs.has('premium'));
+            assert(usedConfigs.has('basic'));
+            assert(usedConfigs.has('unknown'));
+        });
+        
+        it('should cache config results efficiently', async () => {
+            const app = fastify();
+            let configResolverCalls = 0;
+            
+            await app.register(rateLimit, {
+                keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+                configResolver: (apiKey) => {
+                    configResolverCalls++;
+                    return {
+                        maxTokens: 5,
+                        window: '1s'
+                    };
+                }
+            });
+            
+            app.get('/cached', async (request, reply) => {
+                return { message: 'success' };
+            });
+            
+            await app.ready();
+            
+            // Make multiple requests with same API key
+            for (let i = 0; i < 3; i++) {
+                const res = await app.inject({
+                    method: 'GET',
+                    url: '/cached',
+                    headers: { 'x-api-key': 'test-key' }
+                });
+                assert.strictEqual(res.statusCode, 200);
+            }
+            
+            // Config resolver should be called only once due to caching
+            assert.strictEqual(configResolverCalls, 1);
+        });
+    });
 }); 

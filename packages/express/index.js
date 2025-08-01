@@ -11,14 +11,11 @@ function rateLimit(options = {}) {
         bypassHeader,
         bypassKeys = [],
         keyGenerator,
+        configResolver,
         onRejected,
         redis,
         nats
     } = options;
-
-    // Convert time strings to milliseconds
-    const windowMs = parseDuration(window);
-    const blockMs = block ? parseDuration(block) : 0;
 
     // Create limiter instance with distributed storage if configured
     const limiterOptions = {};
@@ -26,8 +23,18 @@ function rateLimit(options = {}) {
     if (nats) limiterOptions.nats = nats;
     const limiter = new HyperLimit(Object.keys(limiterOptions).length > 0 ? limiterOptions : undefined);
 
-    // Create limiter for this route
-    limiter.createLimiter(key, maxTokens, windowMs, sliding, blockMs, maxPenalty);
+    // If configResolver is provided, we'll create limiters dynamically
+    // Otherwise, create a static limiter for backward compatibility
+    if (!configResolver) {
+        // Convert time strings to milliseconds for static config
+        const windowMs = parseDuration(window);
+        const blockMs = block ? parseDuration(block) : 0;
+        limiter.createLimiter(key, maxTokens, windowMs, sliding, blockMs, maxPenalty);
+    }
+    
+    // Cache for resolved configs to avoid excessive calls to configResolver
+    const configCache = new Map();
+    const CONFIG_CACHE_TTL = 60000; // 1 minute cache
 
     return function rateLimitMiddleware(req, res, next) {
         try {
@@ -40,38 +47,134 @@ function rateLimit(options = {}) {
             }
 
             // Generate key if custom generator provided
-            const clientKey = keyGenerator ? 
-                keyGenerator(req) : 
-                req.ip;
+            let clientKey;
+            try {
+                clientKey = keyGenerator ? 
+                    keyGenerator(req) : 
+                    req.ip;
+            } catch (e) {
+                // If keyGenerator fails, fall back to IP
+                clientKey = req.ip;
+            }
 
-            // Get rate limit info before request
-            const info = limiter.getRateLimitInfo(key);
+            // Determine the limiter key and config to use
+            let limiterKey = key;
+            let effectiveConfig = null;
+            
+            if (configResolver) {
+                // When using configResolver, always use clientKey as limiterKey
+                limiterKey = clientKey;
+                
+                // Check cache first
+                const cached = configCache.get(clientKey);
+                const now = Date.now();
+                
+                if (cached && (now - cached.timestamp < CONFIG_CACHE_TTL)) {
+                    effectiveConfig = cached.config;
+                } else {
+                    // Resolve config
+                    const resolvedConfig = configResolver(clientKey);
+                    effectiveConfig = resolvedConfig;
+                    
+                    // Cache the result (even if null)
+                    configCache.set(clientKey, { config: resolvedConfig, timestamp: now });
+                    
+                    // Clean up old cache entries periodically
+                    if (configCache.size > 1000) {
+                        for (const [k, v] of configCache) {
+                            if (now - v.timestamp > CONFIG_CACHE_TTL) {
+                                configCache.delete(k);
+                            }
+                        }
+                    }
+                    
+                }
+                
+                // If config is null or explicitly denies access, reject immediately
+                if (!effectiveConfig || effectiveConfig.deny || effectiveConfig.maxTokens === 0) {
+                    res.setHeader('X-RateLimit-Limit', '0');
+                    res.setHeader('X-RateLimit-Remaining', '0');
+                    res.setHeader('X-RateLimit-Reset', String(Math.ceil(Date.now() / 1000)));
+                    
+                    if (onRejected) {
+                        return onRejected(req, res, {
+                            error: 'Access denied',
+                            retryAfter: 3600
+                        });
+                    }
+                    
+                    return res.status(429).json({
+                        error: 'Access denied',
+                        retryAfter: 3600
+                    });
+                }
+                
+                // Always create/update the limiter with resolved config when not cached
+                if (!cached || (now - cached.timestamp >= CONFIG_CACHE_TTL)) {
+                    const resolvedWindowMs = parseDuration(effectiveConfig?.window || window);
+                    const resolvedBlockMs = effectiveConfig?.block ? parseDuration(effectiveConfig.block) : (block ? parseDuration(block) : 0);
+                    const resolvedMaxTokens = effectiveConfig?.maxTokens || maxTokens;
+                    const resolvedSliding = effectiveConfig?.sliding !== undefined ? effectiveConfig.sliding : sliding;
+                    const resolvedMaxPenalty = effectiveConfig?.maxPenalty !== undefined ? effectiveConfig.maxPenalty : maxPenalty;
+                    
+                    // Create/update the limiter (createLimiter updates if it exists)
+                    limiter.createLimiter(
+                        limiterKey, 
+                        resolvedMaxTokens, 
+                        resolvedWindowMs, 
+                        resolvedSliding, 
+                        resolvedBlockMs, 
+                        resolvedMaxPenalty
+                    );
+                }
+            }
+
+            // Attach limiter to request for potential use in route handlers
+            req.rateLimit = { limiter, key: limiterKey };
+
+            const allowed = limiter.tryRequest(limiterKey, req.ip);
+            
+            // Get rate limit info after the request
+            let info;
+            try {
+                info = limiter.getRateLimitInfo(limiterKey);
+            } catch (e) {
+                // If limiter doesn't exist, use default values
+                const resolvedLimit = effectiveConfig?.maxTokens || maxTokens;
+                const resolvedWindow = effectiveConfig?.window || window;
+                info = {
+                    limit: resolvedLimit,
+                    remaining: 0,
+                    reset: Date.now() + parseDuration(resolvedWindow),
+                    blocked: false
+                };
+            }
             
             // Set rate limit headers
             res.setHeader('X-RateLimit-Limit', String(info.limit));
             res.setHeader('X-RateLimit-Remaining', String(Math.max(0, info.remaining)));
             res.setHeader('X-RateLimit-Reset', String(Math.ceil(info.reset / 1000))); // Convert to seconds
-
-            // Attach limiter to request for potential use in route handlers
-            req.rateLimit = { limiter, key };
-
-            const allowed = limiter.tryRequest(key, clientKey);
+            
             if (allowed) {
                 return next();
             }
 
+            // Calculate retryAfter based on resolved config or default
+            const configuredWindow = effectiveConfig ? parseDuration(effectiveConfig.window || window) : parseDuration(window);
+            const retryAfterSeconds = info.retryAfter || Math.ceil(configuredWindow / 1000);
+            
             // Return rejection info to be handled by custom handler
             if (onRejected) {
                 return onRejected(req, res, {
                     error: 'Too many requests',
-                    retryAfter: info.retryAfter || Math.ceil(windowMs / 1000)
+                    retryAfter: retryAfterSeconds
                 });
             }
 
             // Default handling if no onRejected provided
             return res.status(429).json({
                 error: 'Too many requests',
-                retryAfter: info.retryAfter || Math.ceil(windowMs / 1000)
+                retryAfter: retryAfterSeconds
             });
         } catch (error) {
             return next(error);
