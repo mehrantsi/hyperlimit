@@ -3,6 +3,9 @@ const request = require('supertest');
 const assert = require('assert');
 const rateLimit = require('../packages/hyperexpress');
 
+// Increase max listeners to avoid warnings from HyperExpress not cleaning up properly
+process.setMaxListeners(20);
+
 describe('HyperExpress Middleware', () => {
     let app;
     let server;
@@ -181,8 +184,9 @@ describe('HyperExpress Middleware', () => {
             
             try {
                 natsApp = new HyperExpress.Server();
+                const uniqueKey = 'nats-test-' + Date.now();
                 natsApp.get('/nats-test', rateLimit({
-                    key: 'nats-test',
+                    key: uniqueKey,
                     maxTokens: 2,
                     window: '10s',
                     nats: {
@@ -250,7 +254,6 @@ describe('HyperExpress Middleware', () => {
 
     describe('configResolver', () => {
         it('should support dynamic rate limit configuration', async () => {
-            const testPort = Math.floor(Math.random() * 10000) + 40000;
             const configApp = new HyperExpress.Server();
             
             // Track which configs were used
@@ -281,7 +284,8 @@ describe('HyperExpress Middleware', () => {
                 res.json({ message: 'success' });
             });
             
-            const configServer = await configApp.listen(testPort);
+            await configApp.listen(0, '127.0.0.1');
+            const testPort = configApp.port;
             
             // Test premium user (10 requests allowed)
             for (let i = 0; i < 10; i++) {
@@ -329,7 +333,6 @@ describe('HyperExpress Middleware', () => {
         });
         
         it('should cache config results efficiently', async () => {
-            const testPort = Math.floor(Math.random() * 10000) + 40000;
             const configApp = new HyperExpress.Server();
             
             let configResolverCalls = 0;
@@ -347,7 +350,8 @@ describe('HyperExpress Middleware', () => {
                 res.json({ message: 'success' });
             });
             
-            const configServer = await configApp.listen(testPort);
+            await configApp.listen(0, '127.0.0.1');
+            const testPort = configApp.port;
             
             // Make multiple requests with same API key
             for (let i = 0; i < 3; i++) {
@@ -361,6 +365,246 @@ describe('HyperExpress Middleware', () => {
             assert.strictEqual(configResolverCalls, 1);
             
             await configApp.close();
+        });
+    });
+
+    describe('Distributed Rate Limiting', () => {
+        it('should share rate limits across multiple HyperExpress instances with NATS', async function() {
+            // Skip if NATS server not available
+            let app1, app2;
+            let server1, server2;
+            let port1, port2;
+            
+            try {
+                // Create two HyperExpress apps with same NATS configuration
+                app1 = new HyperExpress.Server();
+                app2 = new HyperExpress.Server();
+                
+                const natsConfig = {
+                    servers: 'nats://localhost:4222',
+                    bucket: 'test-hyperexpress-distributed',
+                    prefix: 'hyp_dist_'
+                };
+                
+                // Use same key and configuration for both apps
+                const uniqueKey = 'distributed-test-' + Date.now();
+                const rateLimitConfig = {
+                    key: uniqueKey,
+                    maxTokens: 10,
+                    window: '10s',
+                    nats: natsConfig
+                };
+                
+                app1.get('/distributed', rateLimit(rateLimitConfig), (req, res) => {
+                    res.json({ message: 'success from app1' });
+                });
+                
+                app2.get('/distributed', rateLimit(rateLimitConfig), (req, res) => {
+                    res.json({ message: 'success from app2' });
+                });
+                
+                // Let the OS assign available ports
+                await app1.listen(0, '127.0.0.1');
+                server1 = app1;
+                port1 = app1.port;
+                
+                await app2.listen(0, '127.0.0.1');
+                server2 = app2;
+                port2 = app2.port;
+                
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping distributed middleware test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+            
+            // Make 6 requests to app1
+            let app1Allowed = 0;
+            for (let i = 0; i < 6; i++) {
+                const res = await fetch(`http://127.0.0.1:${port1}/distributed`);
+                if (res.status === 200) app1Allowed++;
+            }
+            assert.strictEqual(app1Allowed, 6);
+            
+            // Make 6 requests to app2 - should only allow 4 more
+            let app2Allowed = 0;
+            for (let i = 0; i < 6; i++) {
+                const res = await fetch(`http://127.0.0.1:${port2}/distributed`);
+                if (res.status === 200) app2Allowed++;
+            }
+            assert.strictEqual(app2Allowed, 4);
+            
+            // Total should not exceed the limit
+            assert.strictEqual(app1Allowed + app2Allowed, 10);
+            
+            // Clean up
+            await server1.close();
+            await server2.close();
+        });
+
+        it('should handle concurrent distributed requests correctly', async function() {
+            // Skip if NATS server not available
+            let app1, app2;
+            let server1, server2;
+            let port1, port2;
+            
+            try {
+                // Create two HyperExpress apps
+                app1 = new HyperExpress.Server();
+                app2 = new HyperExpress.Server();
+                
+                const natsConfig = {
+                    servers: 'nats://localhost:4222',
+                    bucket: 'test-hyperexpress-concurrent',
+                    prefix: 'hyp_conc_'
+                };
+                
+                const uniqueKey = 'concurrent-test-' + Date.now();
+                const rateLimitConfig = {
+                    key: uniqueKey,
+                    maxTokens: 50,
+                    window: '10s',
+                    nats: natsConfig
+                };
+                
+                app1.get('/concurrent', rateLimit(rateLimitConfig), (req, res) => {
+                    res.json({ message: 'success' });
+                });
+                
+                app2.get('/concurrent', rateLimit(rateLimitConfig), (req, res) => {
+                    res.json({ message: 'success' });
+                });
+                
+                await app1.listen(0, '127.0.0.1');
+                server1 = app1;
+                port1 = app1.port;
+                
+                await app2.listen(0, '127.0.0.1');
+                server2 = app2;
+                port2 = app2.port;
+                
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping concurrent distributed test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+            
+            // Make concurrent requests from both servers
+            const promises = [];
+            
+            // 40 requests to app1
+            for (let i = 0; i < 40; i++) {
+                promises.push(
+                    fetch(`http://127.0.0.1:${port1}/concurrent`)
+                        .then(res => res.status === 200)
+                );
+            }
+            
+            // 40 requests to app2
+            for (let i = 0; i < 40; i++) {
+                promises.push(
+                    fetch(`http://127.0.0.1:${port2}/concurrent`)
+                        .then(res => res.status === 200)
+                );
+            }
+            
+            const results = await Promise.all(promises);
+            const totalAllowed = results.filter(r => r).length;
+            
+            // Should respect the limit with some tolerance for race conditions
+            assert(totalAllowed >= 48 && totalAllowed <= 52,
+                `Expected ~50 allowed requests, got ${totalAllowed}`);
+            
+            // Clean up
+            await server1.close();
+            await server2.close();
+        });
+
+        it('should use distributed storage with configResolver', async function() {
+            // Skip if NATS server not available
+            let app1, app2;
+            let server1, server2;
+            let port1, port2;
+            
+            try {
+                app1 = new HyperExpress.Server();
+                app2 = new HyperExpress.Server();
+                
+                const natsConfig = {
+                    servers: 'nats://localhost:4222',
+                    bucket: 'test-hyperexpress-resolver',
+                    prefix: 'hyp_res_'
+                };
+                
+                const rateLimitConfig = {
+                    keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+                    configResolver: (apiKey) => {
+                        if (apiKey && apiKey.startsWith('test-key-')) {
+                            return {
+                                maxTokens: 5,
+                                window: '10s'
+                            };
+                        }
+                        return null;
+                    },
+                    nats: natsConfig
+                };
+                
+                app1.get('/resolver', rateLimit(rateLimitConfig), (req, res) => {
+                    res.json({ message: 'success from app1' });
+                });
+                
+                app2.get('/resolver', rateLimit(rateLimitConfig), (req, res) => {
+                    res.json({ message: 'success from app2' });
+                });
+                
+                await app1.listen(0, '127.0.0.1');
+                server1 = app1;
+                port1 = app1.port;
+                
+                await app2.listen(0, '127.0.0.1');
+                server2 = app2;
+                port2 = app2.port;
+                
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping resolver distributed test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+            
+            // Use unique test key to avoid conflicts
+            const testApiKey = 'test-key-' + Date.now();
+            
+            // Make 3 requests to app1 with test-key
+            for (let i = 0; i < 3; i++) {
+                const res = await fetch(`http://127.0.0.1:${port1}/resolver`, {
+                    headers: { 'x-api-key': testApiKey }
+                });
+                assert.strictEqual(res.status, 200);
+            }
+            
+            // Make 3 more requests to app2 - should only allow 2
+            let app2Allowed = 0;
+            for (let i = 0; i < 3; i++) {
+                const res = await fetch(`http://127.0.0.1:${port2}/resolver`, {
+                    headers: { 'x-api-key': testApiKey }
+                });
+                if (res.status === 200) app2Allowed++;
+            }
+            assert.strictEqual(app2Allowed, 2);
+            
+            // Clean up
+            await server1.close();
+            await server2.close();
         });
     });
 }); 

@@ -47,7 +47,9 @@ function createMiddleware(options) {
         // Convert time strings to milliseconds for static config
         const windowMs = parseDuration(window);
         const blockMs = block ? parseDuration(block) : 0;
-        limiter.createLimiter(key, maxTokens, windowMs, sliding, blockMs, maxPenalty);
+        // Use distributed key if distributed storage is configured
+        const distributedKey = (redis || nats) ? `${key}:distributed` : '';
+        limiter.createLimiter(key, maxTokens, windowMs, sliding, blockMs, maxPenalty, distributedKey);
     }
     
     // Cache for resolved configs to avoid excessive calls to configResolver
@@ -137,13 +139,16 @@ function createMiddleware(options) {
                     const resolvedMaxPenalty = effectiveConfig?.maxPenalty !== undefined ? effectiveConfig.maxPenalty : maxPenalty;
                     
                     // Create/update the limiter (createLimiter updates if it exists)
+                    // Use distributed key if distributed storage is configured
+                    const distributedKey = (redis || nats) ? `${limiterKey}:distributed` : '';
                     limiter.createLimiter(
                         limiterKey, 
                         resolvedMaxTokens, 
                         resolvedWindowMs, 
                         resolvedSliding, 
                         resolvedBlockMs, 
-                        resolvedMaxPenalty
+                        resolvedMaxPenalty,
+                        distributedKey
                     );
                 }
             }
