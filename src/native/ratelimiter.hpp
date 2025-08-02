@@ -429,8 +429,8 @@ public:
         if (key.empty()) {
             throw std::invalid_argument("Key cannot be empty");
         }
-        if (maxTokens <= 0) {
-            throw std::invalid_argument("maxTokens must be positive");
+        if (maxTokens < 0) {
+            throw std::invalid_argument("maxTokens cannot be negative");
         }
         if (refillTimeMs <= 0) {
             throw std::invalid_argument("refillTimeMs must be positive");

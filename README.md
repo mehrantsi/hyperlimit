@@ -325,7 +325,58 @@ function parseTimeString(timeStr) {
 
 ## Advanced Features
 
-### 1. Tenant-Based Rate Limiting
+### 1. Dynamic Configuration with configResolver
+
+Use `configResolver` for dynamic, per-request rate limit configuration. This is ideal for multi-tenant applications where different clients have different rate limits:
+
+```javascript
+const express = require('express');
+const rateLimit = require('@hyperlimit/express');
+
+// Example: Dynamic rate limits based on API key
+app.use(rateLimit({
+    keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+    
+    // Called on each request to determine rate limit config
+    configResolver: (apiKey) => {
+        // Look up the configuration for this API key
+        const userTier = getUserTier(apiKey);
+        
+        switch(userTier) {
+            case 'premium':
+                return {
+                    maxTokens: 1000,
+                    window: '1h',
+                    sliding: true
+                };
+            case 'basic':
+                return {
+                    maxTokens: 100,
+                    window: '15m',
+                    sliding: true
+                };
+            default:
+                // Unknown keys get minimal access
+                return {
+                    maxTokens: 10,
+                    window: '1h',
+                    sliding: true
+                };
+        }
+    },
+    
+    // Use distributed storage for multi-instance deployments
+    nats: {
+        servers: 'nats://localhost:4222',
+        bucket: 'rate-limits',
+        prefix: 'rl_'
+    }
+}));
+```
+
+The `configResolver` is called with the key from `keyGenerator` and should return a configuration object. Return `null` or a config with `maxTokens: 0` to deny access.
+
+### 2. Tenant-Based Rate Limiting
 
 Perfect for SaaS applications with different tiers of service:
 
@@ -638,6 +689,15 @@ interface RateLimiterOptions {
     
     // Response Handling
     onRejected?: (req, res, info) => void;  // Custom rejection handler
+    
+    // Dynamic Configuration
+    configResolver?: (key: string) => {    // Dynamic config resolution
+        maxTokens: number;
+        window: string;
+        sliding?: boolean;
+        block?: string;
+        maxPenalty?: number;
+    } | null;
 }
 ```
 

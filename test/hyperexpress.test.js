@@ -247,4 +247,120 @@ describe('HyperExpress Middleware', () => {
             }
         });
     });
+
+    describe('configResolver', () => {
+        it('should support dynamic rate limit configuration', async () => {
+            const testPort = Math.floor(Math.random() * 10000) + 40000;
+            const configApp = new HyperExpress.Server();
+            
+            // Track which configs were used
+            const usedConfigs = new Set();
+            
+            configApp.get('/dynamic', rateLimit({
+                keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+                configResolver: (apiKey) => {
+                    usedConfigs.add(apiKey);
+                    
+                    if (apiKey === 'premium') {
+                        return {
+                            maxTokens: 10,
+                            window: '1s'
+                        };
+                    } else if (apiKey === 'basic') {
+                        return {
+                            maxTokens: 2,
+                            window: '1s'
+                        };
+                    }
+                    return {
+                        maxTokens: 0,
+                        window: '1s'
+                    };
+                }
+            }), (req, res) => {
+                res.json({ message: 'success' });
+            });
+            
+            const configServer = await configApp.listen(testPort);
+            
+            // Test premium user (10 requests allowed)
+            for (let i = 0; i < 10; i++) {
+                const res = await fetch(`http://127.0.0.1:${testPort}/dynamic`, {
+                    headers: { 'x-api-key': 'premium' }
+                });
+                assert.strictEqual(res.status, 200);
+            }
+            
+            // 11th request should be rate limited
+            const res11 = await fetch(`http://127.0.0.1:${testPort}/dynamic`, {
+                headers: { 'x-api-key': 'premium' }
+            });
+            assert.strictEqual(res11.status, 429);
+            
+            // Test basic user (2 requests allowed)
+            const basicRes1 = await fetch(`http://127.0.0.1:${testPort}/dynamic`, {
+                headers: { 'x-api-key': 'basic' }
+            });
+            assert.strictEqual(basicRes1.status, 200);
+            
+            const basicRes2 = await fetch(`http://127.0.0.1:${testPort}/dynamic`, {
+                headers: { 'x-api-key': 'basic' }
+            });
+            assert.strictEqual(basicRes2.status, 200);
+            
+            // 3rd request should be rate limited
+            const basicRes3 = await fetch(`http://127.0.0.1:${testPort}/dynamic`, {
+                headers: { 'x-api-key': 'basic' }
+            });
+            assert.strictEqual(basicRes3.status, 429);
+            
+            // Test unknown user (no requests allowed)
+            const unknownRes = await fetch(`http://127.0.0.1:${testPort}/dynamic`, {
+                headers: { 'x-api-key': 'unknown' }
+            });
+            assert.strictEqual(unknownRes.status, 429);
+            
+            // Verify configs were called
+            assert(usedConfigs.has('premium'));
+            assert(usedConfigs.has('basic'));
+            assert(usedConfigs.has('unknown'));
+            
+            await configApp.close();
+        });
+        
+        it('should cache config results efficiently', async () => {
+            const testPort = Math.floor(Math.random() * 10000) + 40000;
+            const configApp = new HyperExpress.Server();
+            
+            let configResolverCalls = 0;
+            
+            configApp.get('/cached', rateLimit({
+                keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+                configResolver: (apiKey) => {
+                    configResolverCalls++;
+                    return {
+                        maxTokens: 5,
+                        window: '1s'
+                    };
+                }
+            }), (req, res) => {
+                res.json({ message: 'success' });
+            });
+            
+            const configServer = await configApp.listen(testPort);
+            
+            // Make multiple requests with same API key
+            for (let i = 0; i < 3; i++) {
+                const res = await fetch(`http://127.0.0.1:${testPort}/cached`, {
+                    headers: { 'x-api-key': 'test-key' }
+                });
+                assert.strictEqual(res.status, 200);
+            }
+            
+            // Config resolver should be called only once due to caching
+            assert.strictEqual(configResolverCalls, 1);
+            
+            await configApp.close();
+        });
+    });
 }); 
