@@ -80,4 +80,19 @@ public:
 
         g_redisLoader.freeReplyObject(reply);
     }
+    
+    void reset(const std::string& key, int64_t maxTokens) override {
+        std::string fullKey = prefix + key;
+        
+        // SET key maxTokens
+        redisReply* reply = (redisReply*)g_redisLoader.redisCommand(redis,
+            "SET %s %lld",
+            fullKey.c_str(), maxTokens);
+
+        if (!reply) {
+            throw std::runtime_error("Redis command failed");
+        }
+
+        g_redisLoader.freeReplyObject(reply);
+    }
 }; 
