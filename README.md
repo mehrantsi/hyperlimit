@@ -285,11 +285,11 @@ function customRateLimiter(options = {}) {
         defaultKey,
         options.maxTokens || 100,
         typeof options.window === 'string' 
-            ? parseTimeString(options.window) 
+            ? parseDuration(options.window) 
             : (options.window || 60000),
         options.sliding !== false,
         typeof options.block === 'string'
-            ? parseTimeString(options.block)
+            ? parseDuration(options.block)
             : (options.block || 0),
         options.maxPenalty || 0
     );
@@ -314,7 +314,7 @@ function customRateLimiter(options = {}) {
 }
 
 // Helper to parse time strings (e.g., '1m', '30s')
-function parseTimeString(timeStr) {
+function parseDuration(timeStr) {
     const units = { ms: 1, s: 1000, m: 60000, h: 3600000, d: 86400000 };
     const match = timeStr.match(/^(\d+)([a-z]+)$/i);
     if (!match) return parseInt(timeStr, 10);

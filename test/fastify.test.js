@@ -173,9 +173,10 @@ describe('Fastify Plugin', () => {
             let natsApp;
             try {
                 natsApp = fastify();
+                const uniqueKey = 'nats-test-' + Date.now();
                 natsApp.get('/nats-test', {
                     preHandler: rateLimit({
-                        key: 'nats-test',
+                        key: uniqueKey,
                         maxTokens: 2,
                         window: '10s',
                         nats: {
@@ -344,6 +345,250 @@ describe('Fastify Plugin', () => {
             
             // Config resolver should be called only once due to caching
             assert.strictEqual(configResolverCalls, 1);
+        });
+    });
+
+    describe('Distributed Rate Limiting', () => {
+        it('should share rate limits across multiple Fastify instances with NATS', async function() {
+            // Skip if NATS server not available
+            let app1, app2;
+            
+            try {
+                // Create two Fastify apps with same NATS configuration
+                app1 = fastify();
+                app2 = fastify();
+                
+                const natsConfig = {
+                    servers: 'nats://localhost:4222',
+                    bucket: 'test-fastify-distributed',
+                    prefix: 'fas_dist_'
+                };
+                
+                // Use same key and configuration for both apps
+                const uniqueKey = 'distributed-test-' + Date.now();
+                const rateLimitConfig = {
+                    key: uniqueKey,
+                    maxTokens: 10,
+                    window: '10s',
+                    nats: natsConfig
+                };
+                
+                app1.get('/distributed', {
+                    preHandler: rateLimit(rateLimitConfig)
+                }, async (request, reply) => {
+                    return { message: 'success from app1' };
+                });
+                
+                app2.get('/distributed', {
+                    preHandler: rateLimit(rateLimitConfig)
+                }, async (request, reply) => {
+                    return { message: 'success from app2' };
+                });
+                
+                await app1.ready();
+                await app2.ready();
+                
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping distributed middleware test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+            
+            // Make 6 requests to app1
+            let app1Allowed = 0;
+            for (let i = 0; i < 6; i++) {
+                const res = await app1.inject({
+                    method: 'GET',
+                    url: '/distributed'
+                });
+                if (res.statusCode === 200) app1Allowed++;
+            }
+            assert.strictEqual(app1Allowed, 6);
+            
+            // Make 6 requests to app2 - should only allow 4 more
+            let app2Allowed = 0;
+            for (let i = 0; i < 6; i++) {
+                const res = await app2.inject({
+                    method: 'GET',
+                    url: '/distributed'
+                });
+                if (res.statusCode === 200) app2Allowed++;
+            }
+            assert.strictEqual(app2Allowed, 4);
+            
+            // Total should not exceed the limit
+            assert.strictEqual(app1Allowed + app2Allowed, 10);
+            
+            // Clean up
+            await app1.close();
+            await app2.close();
+        });
+
+        it('should handle concurrent distributed requests correctly', async function() {
+            // Skip if NATS server not available
+            let app1, app2;
+            
+            try {
+                // Create two Fastify apps
+                app1 = fastify();
+                app2 = fastify();
+                
+                const natsConfig = {
+                    servers: 'nats://localhost:4222',
+                    bucket: 'test-fastify-concurrent',
+                    prefix: 'fas_conc_'
+                };
+                
+                const uniqueKey = 'concurrent-test-' + Date.now();
+                const rateLimitConfig = {
+                    key: uniqueKey,
+                    maxTokens: 50,
+                    window: '10s',
+                    nats: natsConfig
+                };
+                
+                app1.get('/concurrent', {
+                    preHandler: rateLimit(rateLimitConfig)
+                }, async (request, reply) => {
+                    return { message: 'success' };
+                });
+                
+                app2.get('/concurrent', {
+                    preHandler: rateLimit(rateLimitConfig)
+                }, async (request, reply) => {
+                    return { message: 'success' };
+                });
+                
+                await app1.ready();
+                await app2.ready();
+                
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping concurrent distributed test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+            
+            // Make concurrent requests from both servers
+            const promises = [];
+            
+            // 40 requests to app1
+            for (let i = 0; i < 40; i++) {
+                promises.push(
+                    app1.inject({
+                        method: 'GET',
+                        url: '/concurrent'
+                    }).then(res => res.statusCode === 200)
+                );
+            }
+            
+            // 40 requests to app2
+            for (let i = 0; i < 40; i++) {
+                promises.push(
+                    app2.inject({
+                        method: 'GET',
+                        url: '/concurrent'
+                    }).then(res => res.statusCode === 200)
+                );
+            }
+            
+            const results = await Promise.all(promises);
+            const totalAllowed = results.filter(r => r).length;
+            
+            // Should respect the limit with some tolerance for race conditions
+            assert(totalAllowed >= 48 && totalAllowed <= 52,
+                `Expected ~50 allowed requests, got ${totalAllowed}`);
+            
+            // Clean up
+            await app1.close();
+            await app2.close();
+        });
+
+        it('should use distributed storage with configResolver', async function() {
+            // Skip if NATS server not available
+            let app1, app2;
+            
+            try {
+                app1 = fastify();
+                app2 = fastify();
+                
+                const natsConfig = {
+                    servers: 'nats://localhost:4222',
+                    bucket: 'test-fastify-resolver',
+                    prefix: 'fas_res_'
+                };
+                
+                const rateLimitConfig = {
+                    keyGenerator: (req) => req.headers['x-api-key'] || 'anonymous',
+                    configResolver: (apiKey) => {
+                        if (apiKey && apiKey.startsWith('test-key-')) {
+                            return {
+                                maxTokens: 5,
+                                window: '10s'
+                            };
+                        }
+                        return null;
+                    },
+                    nats: natsConfig
+                };
+                
+                app1.get('/resolver', {
+                    preHandler: rateLimit(rateLimitConfig)
+                }, async (request, reply) => {
+                    return { message: 'success from app1' };
+                });
+                
+                app2.get('/resolver', {
+                    preHandler: rateLimit(rateLimitConfig)
+                }, async (request, reply) => {
+                    return { message: 'success from app2' };
+                });
+                
+                await app1.ready();
+                await app2.ready();
+                
+            } catch (err) {
+                if (err.message.includes('NATS connection failed')) {
+                    console.log('    ⚠️  NATS server not available, skipping resolver distributed test');
+                    this.skip();
+                    return;
+                }
+                throw err;
+            }
+            
+            // Use unique test key to avoid conflicts
+            const testApiKey = 'test-key-' + Date.now();
+            
+            // Make 3 requests to app1 with test-key
+            for (let i = 0; i < 3; i++) {
+                const res = await app1.inject({
+                    method: 'GET',
+                    url: '/resolver',
+                    headers: { 'x-api-key': testApiKey }
+                });
+                assert.strictEqual(res.statusCode, 200);
+            }
+            
+            // Make 3 more requests to app2 - should only allow 2
+            let app2Allowed = 0;
+            for (let i = 0; i < 3; i++) {
+                const res = await app2.inject({
+                    method: 'GET',
+                    url: '/resolver',
+                    headers: { 'x-api-key': testApiKey }
+                });
+                if (res.statusCode === 200) app2Allowed++;
+            }
+            assert.strictEqual(app2Allowed, 2);
+            
+            // Clean up
+            await app1.close();
+            await app2.close();
         });
     });
 }); 
