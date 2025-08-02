@@ -108,7 +108,7 @@ public:
         
         kvConf.bucket = bucket.c_str();
         kvConf.history = 1;
-        kvConf.ttl = 3600000000000;  // 1 hour TTL in nanoseconds (3600 * 1e9)
+        kvConf.ttl = 86400000000000;  // 24 hours TTL in nanoseconds (86400 * 1e9)
         
         s = g_natsLoader.js_CreateKeyValue(&kv, js, &kvConf);
         if (s != NATS_OK) {
@@ -133,7 +133,7 @@ public:
         if (nc) g_natsLoader.natsConnection_Destroy(nc);
     }
 
-    bool tryAcquire(const std::string& key, int64_t maxTokens) override {
+    bool tryAcquire(const std::string& key, int64_t tokens) override {
         if (!kv) return false; // Safety check
         
         // NATS JetStream KV Store does not allow colons in key names
@@ -148,7 +148,7 @@ public:
         
         if (s == NATS_NOT_FOUND) {
             // Key doesn't exist, initialize it with maxTokens, then decrement by 1
-            std::string value = std::to_string(maxTokens);
+            std::string value = std::to_string(tokens);
             uint64_t rev;
             s = g_natsLoader.kvStore_CreateString(&rev, kv, fullKey.c_str(), value.c_str());
             
@@ -157,8 +157,8 @@ public:
             }
             
             // Now decrement by 1 (acquiring 1 token)
-            if (maxTokens > 0) {
-                std::string newValue = std::to_string(maxTokens - 1);
+            if (tokens > 0) {
+                std::string newValue = std::to_string(tokens - 1);
                 uint64_t newRev;
                 s = g_natsLoader.kvStore_UpdateString(&newRev, kv, fullKey.c_str(), newValue.c_str(), rev);
                 return s == NATS_OK;
@@ -244,5 +244,19 @@ public:
         std::string newValue = std::to_string(currentTokens + tokens);
         uint64_t newRev;
         g_natsLoader.kvStore_UpdateString(&newRev, kv, fullKey.c_str(), newValue.c_str(), revision);
+    }
+    
+    void reset(const std::string& key, int64_t maxTokens) override {
+        if (!kv) return; // Safety check
+        
+        // NATS JetStream KV Store does not allow colons in key names
+        std::string sanitizedKey = prefix + key;
+        std::replace(sanitizedKey.begin(), sanitizedKey.end(), ':', '_');
+        const std::string fullKey = sanitizedKey;
+        
+        // Set the value to maxTokens regardless of current value
+        std::string value = std::to_string(maxTokens);
+        uint64_t rev;
+        g_natsLoader.kvStore_Put(&rev, kv, fullKey.c_str(), value.c_str(), value.length());
     }
 };

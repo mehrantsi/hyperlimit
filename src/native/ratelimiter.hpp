@@ -34,6 +34,7 @@ public:
     virtual ~DistributedStorage() = default;
     virtual bool tryAcquire(const std::string& key, int64_t tokens) = 0;
     virtual void release(const std::string& key, int64_t tokens) = 0;
+    virtual void reset(const std::string& key, int64_t maxTokens) = 0;
 };
 
 class RateLimiter {
@@ -257,6 +258,17 @@ private:
                     std::memory_order_acq_rel, std::memory_order_acquire)) {
                     entry.dynamicMaxTokens.store(dynamicLimit, std::memory_order_release);
                     entry.tokens.store(newTokens, std::memory_order_release);
+                    
+                    // Sync sliding window refill with distributed storage
+                    if (distributedStorage && !entry.distributedKey.empty() && tokensToAdd > 0) {
+                        try {
+                            // Release tokens back to distributed storage (effectively adding them)
+                            distributedStorage->release(entry.distributedKey, tokensToAdd);
+                        } catch (...) {
+                            // Ignore errors - distributed storage might be temporarily unavailable
+                        }
+                    }
+                    
                     return;
                 }
             } else {
@@ -265,6 +277,16 @@ private:
                     std::memory_order_acq_rel, std::memory_order_acquire)) {
                     entry.dynamicMaxTokens.store(dynamicLimit, std::memory_order_release);
                     entry.tokens.store(dynamicLimit, std::memory_order_release);
+                    
+                    // Reset distributed storage for fixed window
+                    if (distributedStorage && !entry.distributedKey.empty()) {
+                        try {
+                            distributedStorage->reset(entry.distributedKey, dynamicLimit);
+                        } catch (...) {
+                            // Ignore errors - distributed storage might be temporarily unavailable
+                        }
+                    }
+                    
                     return;
                 }
             }
@@ -512,7 +534,7 @@ public:
         // If we have distributed storage and a distributed key is set, check it first
         if (distributedStorage && !entry->distributedKey.empty()) {
             try {
-                if (!distributedStorage->tryAcquire(entry->distributedKey, entry->baseMaxTokens)) {
+                if (!distributedStorage->tryAcquire(entry->distributedKey, entry->dynamicMaxTokens.load(std::memory_order_acquire))) {
                     metrics.blockedRequests.fetch_add(1, std::memory_order_relaxed);
                     return false;
                 }
