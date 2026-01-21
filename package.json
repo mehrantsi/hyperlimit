@@ -61,7 +61,7 @@
     "hyper-express": "^6.17.3",
     "ioredis": "^5.4.2",
     "mocha": "^10.2.0",
-    "node-gyp": "^10.0.1",
+    "node-gyp": "^12.1.0",
     "prebuildify": "^5.0.1",
     "rate-limiter-flexible": "^5.0.4",
     "supertest": "^7.1.0",
